@@ -6,6 +6,9 @@
 # Node artifact files
 node_modules/
 dist/
+frontend/node_modules/
+frontend/build/
+frontend/dist/
 
 # Compiled Java class files
 *.class
@@ -47,4 +50,8 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
-
+alertmind-ai-backend/.env
+alertmind-ai-backend/.venv/
+alertmind-ai-backend/*.pid
+frontend/.env
+frontend/venv/
