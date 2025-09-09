@@ -15,16 +15,16 @@ import {
   useTheme,
 } from "@mui/material";
 import InsightsIcon from "@mui/icons-material/Insights";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import LanIcon from "@mui/icons-material/Lan";
-import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import { drawerWidthExpanded, drawerWidthCollapsed } from "./constants";
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: <InsightsIcon /> },
+  { id: "ops", label: "Ops Console", icon: <InsightsIcon /> },
   { id: "alerts", label: "Alert Feed", icon: <WarningAmberIcon /> },
   { id: "cascade", label: "Cascade Map", icon: <LanIcon /> },
-  { id: "clients", label: "Clients", icon: <PeopleAltIcon /> },
+  { id: "agent", label: "AI Agent", icon: <SmartToyIcon /> },
 ];
 
 const SideDrawer = ({ drawerOpen, activeTab, onChangeTab }) => {

@@ -75,6 +75,88 @@ class ApiClient {
       }),
     });
   }
+
+  // Agentic AI endpoints
+  async startAgent() {
+    return this.request("/agent/start", { method: "POST" });
+  }
+
+  async stopAgent() {
+    return this.request("/agent/stop", { method: "POST" });
+  }
+
+  async getAgentStatus() {
+    return this.request("/agent/status");
+  }
+
+  async analyzeCascadeRisk(clientId) {
+    return this.request(`/agent/analyze?client_id=${clientId}`, {
+      method: "POST",
+    });
+  }
+
+  async executePrevention(clientId, preventionPlan) {
+    return this.request("/agent/prevent", {
+      method: "POST",
+      body: JSON.stringify({
+        client_id: clientId,
+        prevention_plan: preventionPlan,
+      }),
+    });
+  }
+
+  async getAgentInsights() {
+    return this.request("/agent/insights");
+  }
+
+  async getAgentPredictions() {
+    return this.request("/agent/predictions");
+  }
+
+  async triggerAgentLearning() {
+    return this.request("/agent/learn", { method: "POST" });
+  }
+
+  async getAgentDecisions() {
+    return this.request("/agent/decisions");
+  }
+
+  async getAgentPatterns() {
+    return this.request("/agent/patterns");
+  }
+
+  async simulateCascade(scenario) {
+    return this.request("/agent/simulate-cascade", {
+      method: "POST",
+      body: JSON.stringify(scenario),
+    });
+  }
+
+  async getResolutionPlaybook(clientId) {
+    return this.request(`/agent/resolution-playbook?client_id=${clientId}`, {
+      method: "POST",
+    });
+  }
+
+  // Patch management endpoints
+  async getPatchAdvisories(clientId) {
+    return this.request(`/patch/advisories?client_id=${clientId}`);
+  }
+
+  async planPatchWindow(clientId, advisories) {
+    return this.request(`/patch/plan?client_id=${clientId}`, {
+      method: "POST",
+      body: JSON.stringify(advisories),
+    });
+  }
+
+  async simulateBlast(clientId, product) {
+    return this.request(
+      `/patch/simulate-blast?client_id=${clientId}&product=${encodeURIComponent(
+        product
+      )}`
+    );
+  }
 }
 
 export const apiClient = new ApiClient();
