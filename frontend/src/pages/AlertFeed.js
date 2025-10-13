@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { apiClient } from "../utils/apiClient";
 
 const AlertFeed = ({ alerts, filteredData, loading }) => {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [selectedClient, setSelectedClient] = useState("all");
+  const [clientAlerts, setClientAlerts] = useState(alerts || []);
 
   if (loading) {
     return (
@@ -56,16 +58,35 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
   };
 
   // Get unique clients for filter dropdown
-  const uniqueClients = [...new Set(alerts.map((alert) => alert.client_name))];
+  const uniqueClients = [
+    ...new Set((alerts || []).map((alert) => alert.client_name)),
+  ];
 
   // Filter alerts based on selected filters
-  const filteredAlerts = alerts.filter((alert) => {
+  const filteredAlerts = clientAlerts.filter((alert) => {
     if (selectedFilter !== "all" && alert.severity !== selectedFilter)
       return false;
     if (selectedClient !== "all" && alert.client_name !== selectedClient)
       return false;
     return true;
   });
+
+  useEffect(() => {
+    setClientAlerts(alerts || []);
+  }, [alerts]);
+
+  const handleClientChange = async (clientName) => {
+    setSelectedClient(clientName);
+
+    if (clientName === "all") {
+      setClientAlerts(alerts || []);
+      return;
+    }
+
+    // Filter alerts by client name locally for simplicity
+    const filtered = (alerts || []).filter((a) => a.client_name === clientName);
+    setClientAlerts(filtered);
+  };
 
   const criticalAlerts = filteredData
     ? filteredData.critical_alerts
@@ -117,7 +138,7 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
             <label className="text-sm text-gray-400">Client:</label>
             <select
               value={selectedClient}
-              onChange={(e) => setSelectedClient(e.target.value)}
+              onChange={(e) => handleClientChange(e.target.value)}
               className="bg-gray-700 text-white px-3 py-1 rounded border border-gray-600 text-sm"
             >
               <option value="all">All Clients</option>
