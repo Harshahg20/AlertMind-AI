@@ -52,6 +52,7 @@ Thumbs.db
 *.wmv
 alertmind-ai-backend/.env
 alertmind-ai-backend/.venv/
+alertmind-ai-backend/venv/
 alertmind-ai-backend/*.pid
 frontend/.env
 frontend/venv/
