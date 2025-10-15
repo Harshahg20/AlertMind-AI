@@ -19,14 +19,16 @@ class AgenticAIService:
     """
     
     def __init__(self, api_key: Optional[str] = None):
-        # For demo purposes, we'll use a mock API key
-        # In production, set your actual Google AI API key
-        self.api_key = api_key or "demo_key"
+        # Get API key from environment variable or parameter
+        import os
+        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY") or "demo_key"
         
-        # Initialize Gemini (mock for demo - replace with real API key)
+        # Initialize Gemini with correct model name
         if self.api_key != "demo_key":
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            # Use the correct model name for Gemini 1.5
+            self.model = genai.GenerativeModel('gemini-1.5-pro')
+            logger.info("✅ Gemini 1.5 Pro model loaded successfully")
         else:
             self.model = None
             logger.warning("Using mock AI responses - set GOOGLE_AI_API_KEY for real predictions")

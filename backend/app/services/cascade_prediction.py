@@ -49,7 +49,7 @@ class CascadePredictionEngine:
         predictions = []
         
         for alert in alerts:
-            if alert.severity in ["critical", "warning"] and not alert.auto_resolved:
+            if alert.severity in ["critical", "warning"]:
                 prediction = self._analyze_single_alert(alert, client, alerts)
                 if prediction and prediction.prediction_confidence > 0.5:
                     predictions.append(prediction)
@@ -89,7 +89,8 @@ class CascadePredictionEngine:
                     prediction_confidence=0.6,
                     predicted_cascade_systems=affected_systems[:2],
                     time_to_cascade_minutes=random.randint(8, 25),
-                    prevention_actions=["Check system dependencies", "Monitor related services"]
+                    prevention_actions=["Check system dependencies", "Monitor related services"],
+                    pattern_matched="dependency_based_fallback"
                 )
         
         return None
@@ -150,4 +151,4 @@ class CascadePredictionEngine:
                 "confidence": min(0.9, len(similar_patterns) / 10)  # Higher confidence with more historical data
             }
         
-        return {"similar_incidents_count": 0, "confidence": 0.3}
+        return {"similar_incidents_count": 0, "average_cascade_time": 15, "commonly_affected_systems": [], "confidence": 0.3}

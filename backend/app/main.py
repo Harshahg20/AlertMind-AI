@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-import os
-from app.api import alerts, predictions, agentic, patch
+from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution
 
 # Load environment variables from .env file
 load_dotenv()
@@ -27,6 +25,9 @@ app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(predictions.router, prefix="/api/predictions", tags=["predictions"])
 app.include_router(agentic.router, prefix="/api/agent", tags=["agentic-ai"])
 app.include_router(patch.router, prefix="/api/patch", tags=["patch-management"])
+app.include_router(alert_correlation_agent.router, prefix="/api/alert-correlation", tags=["alert-correlation-agent"])
+app.include_router(autonomous_decision.router, prefix="/api/autonomous-decision", tags=["autonomous-decision-agent"])
+app.include_router(prevention_execution.router, prefix="/api/prevention-execution", tags=["prevention-execution-agent"])
 
 @app.get("/")
 def read_root():
@@ -39,13 +40,19 @@ def read_root():
             "Cross-Client Pattern Learning", 
             "Intelligent Alert Correlation",
             "Proactive Failure Prevention",
-            "Google Gemini AI Integration"
+            "Google Gemini AI Integration",
+            "Alert Correlation Agent with Sentence Transformers",
+            "Autonomous Decision Agent with Gemini 1.5 Pro",
+            "Prevention Execution Agent with Deterministic Orchestration"
         ],
         "agentic_capabilities": {
             "autonomous_agent": "Active cascade prevention agent",
             "ai_analysis": "Google Gemini Flash integration",
             "prevention_executor": "Automated action execution",
-            "pattern_learning": "Cross-client intelligence"
+            "pattern_learning": "Cross-client intelligence",
+            "alert_correlation_agent": "Sentence transformer-based alert clustering",
+            "autonomous_decision_agent": "Gemini 1.5 Pro + deterministic business logic",
+            "prevention_execution_agent": "Deterministic orchestration + tiny LLM summaries"
         }
     }
 

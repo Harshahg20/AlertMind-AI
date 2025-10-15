@@ -6,7 +6,6 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
   const [selectedClient, setSelectedClient] = useState("all");
   const [clientAlerts, setClientAlerts] = useState(alerts || []);
 
-  // Move useEffect to the top, before any conditional returns
   useEffect(() => {
     setClientAlerts(alerts || []);
   }, [alerts]);
