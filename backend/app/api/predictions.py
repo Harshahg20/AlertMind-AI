@@ -3,14 +3,16 @@ from typing import List, Dict
 from datetime import datetime
 import random
 
-from app.models.alert import Alert, CascadePrediction
+from app.models.alert import Alert, CascadePrediction, CorrelatedData
 from app.services.cascade_prediction import CascadePredictionEngine
+from app.services.cascade_prediction_agent import create_cascade_prediction_agent
 from app.api.alerts import generate_mock_alerts, MOCK_CLIENTS
 
 router = APIRouter()
 
-# Initialize prediction engine
+# Initialize prediction engine and agent
 prediction_engine = CascadePredictionEngine()
+cascade_agent = create_cascade_prediction_agent()
 
 # Mock historical patterns for cross-client learning
 HISTORICAL_PATTERNS = [
@@ -345,5 +347,70 @@ async def simulate_prevention_impact(alert_id: str, prevention_action: str):
             }
         }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/agent-enhanced")
+async def get_agent_enhanced_predictions(client_id: str = None):
+    """Get cascade predictions enhanced with AI agent reasoning"""
+    try:
+        # Get current alerts
+        all_alerts = generate_mock_alerts()
+        
+        if client_id:
+            # Get predictions for specific client
+            client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+            if not client:
+                raise HTTPException(status_code=404, detail="Client not found")
+            
+            client_alerts = [a for a in all_alerts if a.client_id == client_id and a.cascade_risk > 0.5]
+            if not client_alerts:
+                return {"client_id": client_id, "predictions": [], "message": "No high-risk alerts found"}
+            
+            # Prepare correlated data for agent
+            correlated_data = CorrelatedData(
+                alerts=client_alerts,
+                client=client,
+                historical_data=HISTORICAL_PATTERNS
+            )
+            
+            # Run agent prediction
+            agent_result = await cascade_agent.run(correlated_data.dict())
+            
+            return {
+                "client_id": client_id,
+                "client_name": client.name,
+                "agent_prediction": agent_result,
+                "alerts_analyzed": len(client_alerts),
+                "generated_at": datetime.now().isoformat()
+            }
+        else:
+            # Get predictions for all clients
+            all_predictions = []
+            
+            for client in MOCK_CLIENTS:
+                client_alerts = [a for a in all_alerts if a.client_id == client.id and a.cascade_risk > 0.6]
+                if client_alerts:
+                    correlated_data = CorrelatedData(
+                        alerts=client_alerts,
+                        client=client,
+                        historical_data=HISTORICAL_PATTERNS
+                    )
+                    
+                    agent_result = await cascade_agent.run(correlated_data.dict())
+                    all_predictions.append({
+                        "client_id": client.id,
+                        "client_name": client.name,
+                        "prediction": agent_result
+                    })
+            
+            return {
+                "total_clients_analyzed": len(all_predictions),
+                "predictions": all_predictions,
+                "generated_at": datetime.now().isoformat()
+            }
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
