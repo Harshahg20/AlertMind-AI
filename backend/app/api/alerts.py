@@ -135,19 +135,26 @@ async def get_filtered_alerts():
                 "confidence": corr.correlation_confidence
             }
         
+        # Add correlation info to alerts (create new objects with correlation data)
+        correlated_alerts = []
         for alert in critical_alerts:
+            alert_dict = alert.dict()
             if alert.id in correlation_map:
-                alert.is_correlated = True
-                alert.correlated_with = correlation_map[alert.id]["related_alerts"]
+                alert_dict["is_correlated"] = True
+                alert_dict["correlated_with"] = correlation_map[alert.id]["related_alerts"]
+            else:
+                alert_dict["is_correlated"] = False
+                alert_dict["correlated_with"] = []
+            correlated_alerts.append(alert_dict)
         
         # Generate summary
         summary = correlation_engine.generate_alert_summary(all_alerts, correlations)
         
         return {
             "summary": summary,
-            "critical_alerts": critical_alerts,
-            "noise_alerts": noise_alerts[:10],  # Show first 10 noise alerts for demo
-            "correlations": correlations,
+            "critical_alerts": correlated_alerts,
+            "noise_alerts": [alert.dict() for alert in noise_alerts[:10]],  # Show first 10 noise alerts for demo
+            "correlations": [corr.dict() for corr in correlations],
             "total_processing_time_ms": random.randint(150, 300)
         }
         
