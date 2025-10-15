@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution
 
+# Load environment variables from .env file
+load_dotenv()
+
 app = FastAPI(
     title="CascadeGuard AI API",
     description="Intelligent Multi-Tenant Alert Orchestration with Agentic AI for MSPs",
