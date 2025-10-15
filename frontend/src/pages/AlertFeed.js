@@ -6,6 +6,11 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
   const [selectedClient, setSelectedClient] = useState("all");
   const [clientAlerts, setClientAlerts] = useState(alerts || []);
 
+  // Move useEffect to the top, before any conditional returns
+  useEffect(() => {
+    setClientAlerts(alerts || []);
+  }, [alerts]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -70,10 +75,6 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
       return false;
     return true;
   });
-
-  useEffect(() => {
-    setClientAlerts(alerts || []);
-  }, [alerts]);
 
   const handleClientChange = async (clientName) => {
     setSelectedClient(clientName);
