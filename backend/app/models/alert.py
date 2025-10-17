@@ -48,6 +48,7 @@ class CascadePrediction(BaseModel):
     prediction_confidence: float
     predicted_cascade_systems: List[str]
     time_to_cascade_minutes: int
+    resolution_time_minutes: int  # Added missing field
     prevention_actions: List[str]
     pattern_matched: Optional[str] = None
 
