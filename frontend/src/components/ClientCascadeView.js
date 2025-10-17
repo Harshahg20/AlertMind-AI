@@ -25,7 +25,7 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
   const [activeView, setActiveView] = useState("overview"); // overview, detailed, enhanced
 
   useEffect(() => {
-    if (clients.length > 0) {
+    if (clients && clients.length > 0) {
       fetchAllClientPredictions();
     }
   }, [clients]);
@@ -41,7 +41,7 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
         try {
           // Get basic predictions
           const basicPreds = await apiClient.getClientPredictions(client.id);
-          predictions[client.id] = basicPreds;
+          predictions[client.id] = Array.isArray(basicPreds) ? basicPreds : [];
 
           // Get enhanced predictions
           const enhancedPred = await apiClient.simulateEnhancedAgent(client.id);
@@ -60,6 +60,9 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
       setEnhancedPredictions(enhanced);
     } catch (error) {
       console.error("Error fetching client predictions:", error);
+      // Set empty state on complete failure
+      setClientPredictions({});
+      setEnhancedPredictions({});
     } finally {
       setLoadingPredictions(false);
     }
@@ -123,8 +126,8 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
 
   const filteredClients =
     selectedClient === "all"
-      ? clients
-      : clients.filter((c) => c.id === selectedClient);
+      ? clients || []
+      : (clients || []).filter((c) => c.id === selectedClient);
 
   if (loading) {
     return (
@@ -179,7 +182,7 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
               className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
             >
               <option value="all">All Clients</option>
-              {clients.map((client) => (
+              {(clients || []).map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
                 </option>
@@ -286,10 +289,17 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                       {basicPreds.slice(0, 2).map((pred, idx) => (
                         <div key={idx} className="flex justify-between text-sm">
                           <span className="text-gray-300">
-                            {pred.affected_systems[0]}
+                            {pred.affected_systems &&
+                            pred.affected_systems.length > 0
+                              ? pred.affected_systems[0]
+                              : pred.pattern ||
+                                pred.pattern_matched ||
+                                "Unknown System"}
                           </span>
                           <span className="text-yellow-400">
-                            {formatTimeToCascade(pred.time_to_cascade_minutes)}
+                            {formatTimeToCascade(
+                              pred.time_to_cascade_minutes || 0
+                            )}
                           </span>
                         </div>
                       ))}
@@ -340,7 +350,11 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                           <div className="flex items-center space-x-2">
                             <AlertTriangle className="w-4 h-4 text-orange-400" />
                             <span className="font-medium text-white">
-                              {prediction.pattern
+                              {(
+                                prediction.pattern ||
+                                prediction.pattern_matched ||
+                                "unknown_pattern"
+                              )
                                 .replace(/_/g, " ")
                                 .toUpperCase()}
                             </span>
@@ -360,12 +374,12 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                             <span className="text-gray-400">Confidence:</span>
                             <span
                               className={`font-medium ${getConfidenceColor(
-                                prediction.prediction_confidence
+                                prediction.prediction_confidence || 0
                               )}`}
                             >
-                              {(prediction.prediction_confidence * 100).toFixed(
-                                0
-                              )}
+                              {(
+                                (prediction.prediction_confidence || 0) * 100
+                              ).toFixed(0)}
                               %
                             </span>
                           </div>
@@ -374,7 +388,10 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                               Affected Systems:
                             </span>
                             <span className="text-white text-sm">
-                              {prediction.affected_systems.join(", ")}
+                              {prediction.affected_systems &&
+                              prediction.affected_systems.length > 0
+                                ? prediction.affected_systems.join(", ")
+                                : "Unknown"}
                             </span>
                           </div>
                           <div className="flex justify-between">
@@ -383,7 +400,7 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                             </span>
                             <span className="text-white text-sm">
                               {formatTimeToCascade(
-                                prediction.resolution_time_minutes
+                                prediction.resolution_time_minutes || 0
                               )}
                             </span>
                           </div>

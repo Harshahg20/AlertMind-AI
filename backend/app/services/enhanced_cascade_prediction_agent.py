@@ -295,6 +295,11 @@ class EnhancedCascadePredictionAgent:
     ) -> Dict[str, Any]:
         """Combine predictions with enhanced analysis"""
         
+        # Infer pattern from available data
+        inferred_pattern = self._infer_pattern_from_combined_data(
+            llm_reasoning, engine_output, alerts, client
+        )
+        
         # Start with LLM reasoning as primary source
         combined = {
             "predicted_in": llm_reasoning.get("predicted_in", engine_output.get("predicted_in", 15)),
@@ -305,6 +310,7 @@ class EnhancedCascadePredictionAgent:
             "affected_systems": llm_reasoning.get("affected_systems", engine_output.get("affected_systems", [])),
             "prevention_actions": llm_reasoning.get("prevention_actions", engine_output.get("prevention_actions", [])),
             "business_impact": llm_reasoning.get("business_impact", "Moderate impact expected"),
+            "pattern": inferred_pattern,  # Add pattern field
             
             # Enhanced analysis
             "enhanced_analysis": {
@@ -472,6 +478,9 @@ class EnhancedCascadePredictionAgent:
     
     def _get_mock_llm_reasoning(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Generate mock LLM reasoning for demo purposes"""
+        # Infer pattern from context or use default
+        inferred_pattern = self._infer_pattern_from_context(context)
+        
         return {
             "predicted_in": 20,
             "confidence": 0.65,
@@ -481,6 +490,7 @@ class EnhancedCascadePredictionAgent:
             "affected_systems": ["database", "web-app"],
             "prevention_actions": ["Scale resources", "Restart services"],
             "business_impact": "Moderate business impact expected",
+            "pattern": inferred_pattern,  # Add pattern field
             "reasoning": {
                 "system_health_score": 65,
                 "resource_exhaustion_risk": "high",
@@ -490,8 +500,114 @@ class EnhancedCascadePredictionAgent:
             }
         }
     
+    def _infer_pattern_from_combined_data(
+        self, 
+        llm_reasoning: Dict[str, Any], 
+        engine_output: Dict[str, Any], 
+        alerts: List[Any], 
+        client: Client
+    ) -> str:
+        """Infer pattern from combined prediction data"""
+        # First try to get pattern from LLM reasoning
+        if llm_reasoning.get("pattern"):
+            return llm_reasoning["pattern"]
+        
+        # Try to get pattern from engine output
+        if engine_output.get("pattern"):
+            return engine_output["pattern"]
+        
+        # Infer from root causes
+        root_causes = llm_reasoning.get("root_causes", [])
+        if root_causes:
+            first_cause = root_causes[0].lower()
+            if "database" in first_cause:
+                return "database_performance_cascade"
+            elif "network" in first_cause:
+                return "network_infrastructure_cascade"
+            elif "storage" in first_cause:
+                return "storage_system_cascade"
+            elif "memory" in first_cause or "cpu" in first_cause:
+                return "resource_exhaustion_cascade"
+        
+        # Infer from affected systems
+        affected_systems = llm_reasoning.get("affected_systems", [])
+        if affected_systems:
+            systems_str = " ".join(affected_systems).lower()
+            if "database" in systems_str:
+                return "database_system_cascade"
+            elif "web-app" in systems_str or "api" in systems_str:
+                return "application_layer_cascade"
+            elif "network" in systems_str:
+                return "network_infrastructure_cascade"
+        
+        # Infer from alerts
+        if alerts:
+            systems = [getattr(alert, 'system', 'unknown') for alert in alerts]
+            categories = [getattr(alert, 'category', 'unknown') for alert in alerts]
+            
+            if "database" in systems:
+                return "database_performance_cascade"
+            elif "web-app" in systems or "api" in systems:
+                return "application_layer_cascade"
+            elif "network" in systems or "network" in categories:
+                return "network_infrastructure_cascade"
+            elif "storage" in systems or "storage" in categories:
+                return "storage_system_cascade"
+        
+        # Default fallback
+        return "enhanced_ai_analyzed_cascade"
+    
+    def _infer_pattern_from_context(self, context: Dict[str, Any]) -> str:
+        """Infer pattern from context data"""
+        # Get alerts from context
+        alerts = context.get("current_alerts", [])
+        client_info = context.get("client_info", {})
+        
+        if not alerts:
+            return "general_system_degradation"
+        
+        # Analyze alert patterns
+        critical_alerts = [a for a in alerts if a.get("severity") == "critical"]
+        warning_alerts = [a for a in alerts if a.get("severity") == "warning"]
+        
+        # Get system types from alerts
+        systems = [a.get("system", "unknown") for a in alerts]
+        categories = [a.get("category", "unknown") for a in alerts]
+        
+        # Infer pattern based on alert characteristics
+        if "database" in systems:
+            if "performance" in categories:
+                return "database_performance_cascade"
+            elif "storage" in categories:
+                return "database_storage_cascade"
+            else:
+                return "database_system_cascade"
+        elif "web-app" in systems or "api" in systems:
+            return "application_layer_cascade"
+        elif "network" in systems or "network" in categories:
+            return "network_infrastructure_cascade"
+        elif "storage" in systems or "storage" in categories:
+            return "storage_system_cascade"
+        elif len(critical_alerts) > 2:
+            return "multi_system_critical_cascade"
+        elif len(warning_alerts) > 3:
+            return "progressive_degradation_cascade"
+        else:
+            return "general_system_instability"
+    
     def _parse_text_response(self, text: str) -> Dict[str, Any]:
         """Parse non-JSON LLM response"""
+        # Infer pattern from text content
+        inferred_pattern = "text_parsed_pattern"
+        if "database" in text.lower():
+            inferred_pattern = "database_related_cascade"
+        elif "network" in text.lower():
+            inferred_pattern = "network_related_cascade"
+        elif "storage" in text.lower():
+            inferred_pattern = "storage_related_cascade"
+        elif "performance" in text.lower():
+            inferred_pattern = "performance_degradation_cascade"
+        
         return {
             "predicted_in": 25,
             "confidence": 0.6,
@@ -500,6 +616,7 @@ class EnhancedCascadePredictionAgent:
             "urgency_level": "medium",
             "affected_systems": [],
             "prevention_actions": ["Manual review recommended"],
+            "pattern": inferred_pattern,  # Add pattern field
             "explanation": {"parse_mode": "text_fallback", "original_response": text}
         }
     
@@ -592,6 +709,21 @@ class EnhancedCascadePredictionAgent:
             critical_count = len([a for a in alerts if a.severity == "critical"])
             avg_cascade_risk = sum(a.cascade_risk for a in alerts) / len(alerts) if alerts else 0
         
+        # Infer pattern for fallback
+        fallback_pattern = "fallback_analysis"
+        if alerts:
+            if isinstance(alerts[0], dict):
+                systems = [a.get("system", "unknown") for a in alerts]
+            else:
+                systems = [getattr(a, 'system', 'unknown') for a in alerts]
+            
+            if "database" in systems:
+                fallback_pattern = "database_fallback_cascade"
+            elif "web-app" in systems or "api" in systems:
+                fallback_pattern = "application_fallback_cascade"
+            elif "network" in systems:
+                fallback_pattern = "network_fallback_cascade"
+        
         return {
             "predicted_in": 20,
             "confidence": min(0.7, avg_cascade_risk),
@@ -604,6 +736,7 @@ class EnhancedCascadePredictionAgent:
             "urgency_level": "high" if critical_count > 0 else "medium",
             "affected_systems": [],
             "prevention_actions": ["Manual investigation required", "Contact senior technician"],
+            "pattern": fallback_pattern,  # Add pattern field
             "agent_metadata": {
                 "agent_name": self.name,
                 "analysis_timestamp": datetime.now().isoformat(),
