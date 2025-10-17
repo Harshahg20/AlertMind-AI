@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution
+from dotenv import load_dotenv
+from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution, enhanced_agentic
 
 # Load environment variables from .env file
 load_dotenv()
@@ -24,6 +25,7 @@ app.add_middleware(
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(predictions.router, prefix="/api/predictions", tags=["predictions"])
 app.include_router(agentic.router, prefix="/api/agent", tags=["agentic-ai"])
+app.include_router(enhanced_agentic.router, prefix="/api/agent", tags=["enhanced-agentic-ai"])
 app.include_router(patch.router, prefix="/api/patch", tags=["patch-management"])
 app.include_router(alert_correlation_agent.router, prefix="/api/alert-correlation", tags=["alert-correlation-agent"])
 app.include_router(autonomous_decision.router, prefix="/api/autonomous-decision", tags=["autonomous-decision-agent"])

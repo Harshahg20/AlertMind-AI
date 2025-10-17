@@ -395,6 +395,5 @@ tmp/
 *.model
 *.pkl
 *.joblib
-models/
 *.h5
 *.hdf5

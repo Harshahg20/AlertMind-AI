@@ -14,17 +14,26 @@ import {
   Box,
   useTheme,
 } from "@mui/material";
-import InsightsIcon from "@mui/icons-material/Insights";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import LanIcon from "@mui/icons-material/Lan";
+import { BarChart3, AlertTriangle, Network, Brain, Shield } from "lucide-react";
 import { drawerWidthExpanded, drawerWidthCollapsed } from "./constants";
 
 const navItems = [
-  { id: "ops", label: "Ops Console", icon: <InsightsIcon /> },
-  { id: "alerts", label: "Alert Feed", icon: <WarningAmberIcon /> },
-  { id: "cascade", label: "Cascade Map", icon: <LanIcon /> },
-  { id: "agent", label: "AI Agent", icon: <SmartToyIcon /> },
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: <BarChart3 className="w-5 h-5" />,
+  },
+  {
+    id: "alerts",
+    label: "Alert Feed",
+    icon: <AlertTriangle className="w-5 h-5" />,
+  },
+  {
+    id: "cascade",
+    label: "Client Cascades",
+    icon: <Network className="w-5 h-5" />,
+  },
+  { id: "ai", label: "AI Control", icon: <Brain className="w-5 h-5" /> },
 ];
 
 const SideDrawer = ({ drawerOpen, activeTab, onChangeTab }) => {

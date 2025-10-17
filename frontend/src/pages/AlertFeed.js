@@ -1,4 +1,19 @@
 import React, { useState, useEffect } from "react";
+import {
+  AlertTriangle,
+  AlertCircle,
+  Info,
+  BarChart3,
+  Shield,
+  Wifi,
+  HardDrive,
+  Server,
+  Filter,
+  Search,
+  Clock,
+  Users,
+  Activity,
+} from "lucide-react";
 import { apiClient } from "../utils/apiClient";
 
 const AlertFeed = ({ alerts, filteredData, loading }) => {
@@ -34,30 +49,30 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
   const getSeverityIcon = (severity) => {
     switch (severity) {
       case "critical":
-        return "🚨";
+        return <AlertTriangle className="w-4 h-4 text-red-400" />;
       case "warning":
-        return "⚠️";
+        return <AlertCircle className="w-4 h-4 text-yellow-400" />;
       case "info":
-        return "ℹ️";
+        return <Info className="w-4 h-4 text-blue-400" />;
       default:
-        return "📋";
+        return <AlertCircle className="w-4 h-4 text-gray-400" />;
     }
   };
 
   const getCategoryIcon = (category) => {
     switch (category) {
       case "performance":
-        return "📊";
+        return <BarChart3 className="w-4 h-4 text-yellow-400" />;
       case "security":
-        return "🔒";
+        return <Shield className="w-4 h-4 text-red-400" />;
       case "network":
-        return "🌐";
+        return <Wifi className="w-4 h-4 text-blue-400" />;
       case "storage":
-        return "💾";
+        return <HardDrive className="w-4 h-4 text-green-400" />;
       case "system":
-        return "⚙️";
+        return <Server className="w-4 h-4 text-purple-400" />;
       default:
-        return "📋";
+        return <Activity className="w-4 h-4 text-gray-400" />;
     }
   };
 
@@ -100,7 +115,7 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-white flex items-center">
-              <span className="mr-2">🚨</span>
+              <AlertTriangle className="w-6 h-6 mr-2 text-red-400" />
               Intelligent Alert Feed
             </h2>
             <p className="text-gray-400 text-sm">
@@ -121,6 +136,7 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
         {/* Filter Controls */}
         <div className="flex flex-wrap gap-4 mb-4">
           <div className="flex items-center space-x-2">
+            <Filter className="w-4 h-4 text-gray-400" />
             <label className="text-sm text-gray-400">Severity:</label>
             <select
               value={selectedFilter}
@@ -135,6 +151,7 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
           </div>
 
           <div className="flex items-center space-x-2">
+            <Users className="w-4 h-4 text-gray-400" />
             <label className="text-sm text-gray-400">Client:</label>
             <select
               value={selectedClient}
