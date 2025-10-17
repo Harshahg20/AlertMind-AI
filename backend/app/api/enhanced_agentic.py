@@ -11,6 +11,7 @@ import asyncio
 
 from app.models.alert import Alert, Client, CorrelatedData, AgentPrediction, SeverityLevel, AlertCategory
 from app.services.enhanced_cascade_prediction_agent import create_enhanced_cascade_prediction_agent
+from app.services.strands_agent import create_strands_agent
 from app.api.alerts import generate_mock_alerts, MOCK_CLIENTS
 from dotenv import load_dotenv
 
@@ -26,6 +27,13 @@ def get_enhanced_cascade_agent():
         AGENT_API_KEY = os.getenv("GOOGLE_AI_API_KEY")
         get_enhanced_cascade_agent._agent = create_enhanced_cascade_prediction_agent(api_key=AGENT_API_KEY)
     return get_enhanced_cascade_agent._agent
+
+# Initialize the Strands Agent
+def get_strands_agent():
+    """Get or create the strands agent"""
+    if not hasattr(get_strands_agent, '_agent'):
+        get_strands_agent._agent = create_strands_agent()
+    return get_strands_agent._agent
 
 # Mock historical data for agent learning
 HISTORICAL_INCIDENTS = [
@@ -354,3 +362,223 @@ async def get_enhanced_learned_patterns():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get enhanced learned patterns: {e}")
+
+# Strands Agent Endpoints
+@router.post("/predict/cascade/strands", response_model=AgentPrediction)
+async def predict_cascade_strands(correlated_data: CorrelatedData):
+    """
+    Advanced cascade prediction using the strands agent
+    Uses multiple parallel analysis strands for comprehensive prediction
+    """
+    try:
+        # Add mock historical data to the correlated_data for agent learning
+        correlated_data.historical_data.extend(HISTORICAL_INCIDENTS)
+        
+        # Get strands agent
+        agent = get_strands_agent()
+        
+        # Run strands prediction
+        agent_result = await agent.run(correlated_data.dict())
+        
+        return AgentPrediction(**agent_result)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Strands agent prediction failed: {e}")
+
+@router.post("/predict/cascade/strands/simple", response_model=AgentPrediction)
+async def predict_cascade_strands_simple(
+    client_id: str = Query(..., description="ID of the client"),
+    alerts_data: List[Dict[str, Any]] = Body(..., description="List of alert dictionaries")
+):
+    """
+    Strands cascade prediction endpoint for specific client and alerts
+    """
+    try:
+        client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+        if not client:
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Convert alerts to dictionaries for the agent
+        alert_dicts = []
+        for alert_data in alerts_data:
+            if isinstance(alert_data, dict):
+                alert_dicts.append(alert_data)
+            else:
+                alert_dicts.append(alert_data.dict())
+        
+        # Prepare correlated data as dictionary
+        correlated_data = {
+            'alerts': alert_dicts,
+            'client': client,
+            'historical_data': HISTORICAL_INCIDENTS
+        }
+        
+        # Get strands agent
+        agent = get_strands_agent()
+        
+        # Run strands prediction
+        agent_result = await agent.run(correlated_data)
+        
+        return AgentPrediction(**agent_result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Strands agent simple prediction failed: {e}")
+
+@router.get("/agent/strands/status")
+async def get_strands_agent_status():
+    """Get current status and capabilities of the Strands Agent"""
+    try:
+        agent = get_strands_agent()
+        return agent.get_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get strands agent status: {e}")
+
+@router.post("/agent/strands/simulate")
+async def simulate_strands_agent_prediction(
+    client_id: str = Query("client_001", description="Client ID for simulation")
+):
+    """Simulate strands agent prediction with multi-strand analysis"""
+    try:
+        client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+        if not client:
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Generate mock alerts for simulation
+        all_mock_alerts = generate_mock_alerts()
+        client_alerts = [a for a in all_mock_alerts if a.client_id == client_id and a.cascade_risk > 0.4]
+        
+        # If no alerts, create mock alerts for demonstration
+        if not client_alerts:
+            mock_alerts = [
+                Alert(
+                    id=f"strands_alert_{client_id}_001",
+                    client_id=client_id,
+                    client_name=client.name,
+                    system="database",
+                    severity=SeverityLevel.CRITICAL,
+                    message="Strands simulation: Database performance degradation detected",
+                    category=AlertCategory.PERFORMANCE,
+                    timestamp=datetime.now(),
+                    cascade_risk=0.8
+                ),
+                Alert(
+                    id=f"strands_alert_{client_id}_002",
+                    client_id=client_id,
+                    client_name=client.name,
+                    system="web-app",
+                    severity=SeverityLevel.WARNING,
+                    message="Strands simulation: High memory usage on web application servers",
+                    category=AlertCategory.SYSTEM,
+                    timestamp=datetime.now() - timedelta(minutes=5),
+                    cascade_risk=0.6
+                )
+            ]
+            client_alerts = mock_alerts
+        
+        # Select 2-3 random alerts
+        import random
+        if len(client_alerts) >= 3:
+            selected_alerts = random.sample(client_alerts, 3)
+        elif len(client_alerts) >= 2:
+            selected_alerts = random.sample(client_alerts, 2)
+        else:
+            selected_alerts = client_alerts
+        
+        # Convert alerts to dictionaries for the agent
+        alert_dicts = []
+        for alert in selected_alerts:
+            alert_dict = {
+                'id': alert.id,
+                'client_id': alert.client_id,
+                'client_name': alert.client_name,
+                'system': alert.system,
+                'severity': alert.severity,
+                'message': alert.message,
+                'category': alert.category,
+                'timestamp': alert.timestamp.isoformat(),
+                'cascade_risk': alert.cascade_risk,
+                'is_correlated': alert.is_correlated
+            }
+            alert_dicts.append(alert_dict)
+        
+        # Prepare correlated data
+        correlated_data = {
+            'alerts': alert_dicts,
+            'client': client,
+            'historical_data': HISTORICAL_INCIDENTS
+        }
+        
+        # Get strands agent
+        agent = get_strands_agent()
+        
+        # Run strands prediction
+        prediction = await agent.run(correlated_data)
+        
+        return {
+            "simulation": True,
+            "strands_analysis": True,
+            "client": {"id": client.id, "name": client.name},
+            "alerts_analyzed": [{"id": a.id, "system": a.system, "severity": a.severity} for a in selected_alerts],
+            "prediction": prediction,
+            "strands_executed": prediction.get("strand_analysis", {}).get("strands_executed", 0),
+            "strands_successful": prediction.get("strand_analysis", {}).get("strands_successful", 0),
+            "execution_time_ms": prediction.get("strand_analysis", {}).get("execution_time_ms", 0),
+            "average_confidence": prediction.get("strand_analysis", {}).get("average_confidence", 0),
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Strands simulation failed: {e}")
+
+@router.get("/agent/strands/performance")
+async def get_strands_agent_performance():
+    """Get performance metrics for the strands agent"""
+    try:
+        agent = get_strands_agent()
+        return {
+            "performance_metrics": agent.performance_metrics,
+            "strand_performance": agent.strand_performance,
+            "memory_usage": {
+                "incident_memory_size": len(agent.incident_memory),
+                "pattern_effectiveness_size": len(agent.pattern_effectiveness),
+                "memory_efficiency": "good" if len(agent.incident_memory) < 800 else "high"
+            },
+            "strands_capabilities": {
+                "max_workers": agent.max_workers,
+                "strands_available": [strand_type.value for strand_type in agent.strand_performance.keys()],
+                "parallel_execution": True,
+                "multi_factor_analysis": True
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get strands agent performance: {e}")
+
+@router.get("/agent/strands/insights")
+async def get_strands_agent_insights():
+    """Get insights and learning from the strands agent's memory"""
+    try:
+        agent = get_strands_agent()
+        return {
+            "total_analyses": agent.performance_metrics.get("total_analyses", 0),
+            "successful_analyses": agent.performance_metrics.get("successful_analyses", 0),
+            "average_execution_time_ms": agent.performance_metrics.get("average_execution_time_ms", 0),
+            "strand_success_rates": agent.strand_performance,
+            "recent_incidents": agent.incident_memory[-5:] if agent.incident_memory else [],
+            "strands_effectiveness": {
+                "most_reliable_strand": max(agent.strand_performance.items(), key=lambda x: x[1]["successful"] / max(1, x[1]["total"])) if agent.strand_performance else None,
+                "strands_used": len(agent.strand_performance),
+                "parallel_execution_benefit": True
+            },
+            "agent_learning_summary": {
+                "total_analyses": agent.performance_metrics.get("total_analyses", 0),
+                "success_rate": agent.performance_metrics.get("successful_analyses", 0) / max(1, agent.performance_metrics.get("total_analyses", 1)),
+                "average_confidence": agent.performance_metrics.get("average_confidence", 0),
+                "execution_efficiency": agent.performance_metrics.get("average_execution_time_ms", 0)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get strands agent insights: {e}")

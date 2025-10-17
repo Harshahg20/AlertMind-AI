@@ -6,13 +6,15 @@ import random
 from app.models.alert import Alert, CascadePrediction, CorrelatedData
 from app.services.cascade_prediction import CascadePredictionEngine
 from app.services.cascade_prediction_agent import create_cascade_prediction_agent
+from app.services.strands_agent import create_strands_agent
 from app.api.alerts import generate_mock_alerts, MOCK_CLIENTS
 
 router = APIRouter()
 
-# Initialize prediction engine and agent
+# Initialize prediction engine and agents
 prediction_engine = CascadePredictionEngine()
 cascade_agent = create_cascade_prediction_agent()
+strands_agent = create_strands_agent()
 
 # Mock historical patterns for cross-client learning
 HISTORICAL_PATTERNS = [
@@ -412,5 +414,80 @@ async def get_agent_enhanced_predictions(client_id: str = None):
         
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/strands-agent")
+async def get_strands_agent_predictions(client_id: str = None):
+    """Get cascade predictions using the advanced strands agent"""
+    try:
+        # Get current alerts
+        all_alerts = generate_mock_alerts()
+        
+        if client_id:
+            # Get predictions for specific client
+            client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+            if not client:
+                raise HTTPException(status_code=404, detail="Client not found")
+            
+            client_alerts = [a for a in all_alerts if a.client_id == client_id and a.cascade_risk > 0.4]
+            if not client_alerts:
+                return {"client_id": client_id, "predictions": [], "message": "No alerts found for strands analysis"}
+            
+            # Prepare correlated data for strands agent
+            correlated_data = {
+                "alerts": [alert.dict() for alert in client_alerts],
+                "client": client.dict(),
+                "historical_data": HISTORICAL_PATTERNS
+            }
+            
+            # Run strands agent prediction
+            strands_result = await strands_agent.run(correlated_data)
+            
+            return {
+                "client_id": client_id,
+                "client_name": client.name,
+                "strands_prediction": strands_result,
+                "alerts_analyzed": len(client_alerts),
+                "agent_status": strands_agent.get_status(),
+                "generated_at": datetime.now().isoformat()
+            }
+        else:
+            # Get predictions for all clients
+            all_predictions = []
+            
+            for client in MOCK_CLIENTS:
+                client_alerts = [a for a in all_alerts if a.client_id == client.id and a.cascade_risk > 0.3]
+                if client_alerts:
+                    correlated_data = {
+                        "alerts": [alert.dict() for alert in client_alerts],
+                        "client": client.dict(),
+                        "historical_data": HISTORICAL_PATTERNS
+                    }
+                    
+                    strands_result = await strands_agent.run(correlated_data)
+                    all_predictions.append({
+                        "client_id": client.id,
+                        "client_name": client.name,
+                        "prediction": strands_result
+                    })
+            
+            return {
+                "total_clients_analyzed": len(all_predictions),
+                "predictions": all_predictions,
+                "agent_status": strands_agent.get_status(),
+                "generated_at": datetime.now().isoformat()
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/strands-agent/status")
+async def get_strands_agent_status():
+    """Get strands agent status and performance metrics"""
+    try:
+        return strands_agent.get_status()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
