@@ -255,10 +255,15 @@ const OptimizedDashboard = ({
               </div>
               {filteredData && (
                 <div className="mt-2">
-                  <p className="text-green-400 text-sm flex items-center">
-                    <TrendingUp className="w-3 h-3 mr-1" />↓{" "}
-                    {filteredData.summary.noise_reduction_percent}% noise
-                    filtered
+                  <p className={`text-sm flex items-center ${
+                    filteredData.summary.noise_reduction_percent >= 0 
+                      ? 'text-green-400' 
+                      : 'text-red-400'
+                  }`}>
+                    <TrendingUp className="w-3 h-3 mr-1" />
+                    {filteredData.summary.noise_reduction_percent >= 0 ? '↓' : '↑'}{" "}
+                    {Math.abs(filteredData.summary.noise_reduction_percent)}% noise
+                    {filteredData.summary.noise_reduction_percent >= 0 ? ' filtered' : ' increased'}
                   </p>
                 </div>
               )}

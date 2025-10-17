@@ -125,10 +125,19 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
 
           {filteredData && (
             <div className="text-right">
-              <div className="text-2xl font-bold text-green-400">
-                -{filteredData.summary.noise_reduction_percent}%
+              <div className={`text-2xl font-bold ${
+                filteredData.summary.noise_reduction_percent >= 0 
+                  ? 'text-green-400' 
+                  : 'text-red-400'
+              }`}>
+                {filteredData.summary.noise_reduction_percent >= 0 ? '-' : '+'}
+                {Math.abs(filteredData.summary.noise_reduction_percent)}%
               </div>
-              <div className="text-sm text-gray-400">Alert noise reduced</div>
+              <div className="text-sm text-gray-400">
+                {filteredData.summary.noise_reduction_percent >= 0 
+                  ? 'Alert noise reduced' 
+                  : 'Alert noise increased'}
+              </div>
             </div>
           )}
         </div>
