@@ -7,6 +7,7 @@ from app.models.alert import Alert, CascadePrediction, CorrelatedData
 from app.services.cascade_prediction import CascadePredictionEngine
 from app.services.cascade_prediction_agent import create_cascade_prediction_agent
 from app.services.strands_agent import create_strands_agent
+from app.services.cascade_failure_agent import create_cascade_failure_agent
 from app.api.alerts import generate_mock_alerts, MOCK_CLIENTS
 
 router = APIRouter()
@@ -15,6 +16,7 @@ router = APIRouter()
 prediction_engine = CascadePredictionEngine()
 cascade_agent = create_cascade_prediction_agent()
 strands_agent = create_strands_agent()
+cascade_failure_agent = create_cascade_failure_agent()
 
 # Mock historical patterns for cross-client learning
 HISTORICAL_PATTERNS = [
@@ -489,5 +491,80 @@ async def get_strands_agent_status():
     """Get strands agent status and performance metrics"""
     try:
         return strands_agent.get_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/cascade-failure-agent")
+async def get_cascade_failure_agent_analysis(client_id: str = None):
+    """Get cascade failure analysis using the advanced cascade failure agent"""
+    try:
+        # Get current alerts
+        all_alerts = generate_mock_alerts()
+        
+        if client_id:
+            # Get analysis for specific client
+            client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+            if not client:
+                raise HTTPException(status_code=404, detail="Client not found")
+            
+            client_alerts = [a for a in all_alerts if a.client_id == client_id and a.cascade_risk > 0.3]
+            if not client_alerts:
+                return {"client_id": client_id, "analysis": [], "message": "No alerts found for failure analysis"}
+            
+            # Prepare correlated data for cascade failure agent
+            correlated_data = {
+                "alerts": [alert.dict() for alert in client_alerts],
+                "client": client.dict(),
+                "historical_data": HISTORICAL_PATTERNS
+            }
+            
+            # Run cascade failure agent analysis
+            failure_analysis = await cascade_failure_agent.run(correlated_data)
+            
+            return {
+                "client_id": client_id,
+                "client_name": client.name,
+                "failure_analysis": failure_analysis,
+                "alerts_analyzed": len(client_alerts),
+                "agent_status": cascade_failure_agent.get_status(),
+                "generated_at": datetime.now().isoformat()
+            }
+        else:
+            # Get analysis for all clients
+            all_analyses = []
+            
+            for client in MOCK_CLIENTS:
+                client_alerts = [a for a in all_alerts if a.client_id == client.id and a.cascade_risk > 0.2]
+                if client_alerts:
+                    correlated_data = {
+                        "alerts": [alert.dict() for alert in client_alerts],
+                        "client": client.dict(),
+                        "historical_data": HISTORICAL_PATTERNS
+                    }
+                    
+                    failure_analysis = await cascade_failure_agent.run(correlated_data)
+                    all_analyses.append({
+                        "client_id": client.id,
+                        "client_name": client.name,
+                        "analysis": failure_analysis
+                    })
+            
+            return {
+                "total_clients_analyzed": len(all_analyses),
+                "analyses": all_analyses,
+                "agent_status": cascade_failure_agent.get_status(),
+                "generated_at": datetime.now().isoformat()
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/cascade-failure-agent/status")
+async def get_cascade_failure_agent_status():
+    """Get cascade failure agent status and performance metrics"""
+    try:
+        return cascade_failure_agent.get_status()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
