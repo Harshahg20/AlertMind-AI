@@ -62,6 +62,7 @@ class AgentPrediction(BaseModel):
     affected_systems: List[str] = []
     prevention_actions: List[str] = []
     pattern_matched: Optional[str] = None
+    pattern: Optional[str] = None  # Added for frontend compatibility
     numeric_engine_output: Optional[Dict[str, Any]] = None
     llm_reasoning: Optional[Dict[str, Any]] = None
     agent_metadata: Optional[Dict[str, Any]] = None
