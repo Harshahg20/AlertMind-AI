@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../utils/apiClient";
 
 export const useAppData = () => {
-  const [activeTab, setActiveTab] = useState("ops");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [alerts, setAlerts] = useState([]);
   const [predictions, setPredictions] = useState([]);
   const [clients, setClients] = useState([]);

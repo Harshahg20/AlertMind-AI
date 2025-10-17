@@ -37,6 +37,10 @@ class ApiClient {
     return this.request(`/alerts/client/${clientId}`);
   }
 
+  async getClientAlertsWithStats(clientId) {
+    return this.request(`/alerts/client/${clientId}/stats`);
+  }
+
   async getAllClients() {
     return this.request("/alerts/clients");
   }
@@ -52,6 +56,12 @@ class ApiClient {
 
   async getClientPredictions(clientId) {
     return this.request(`/predictions/client/${clientId}`);
+  }
+
+  async getClientEnhancedPredictions(clientId) {
+    return this.request(`/predictions/agent-enhanced?client_id=${clientId}`, {
+      method: "POST",
+    });
   }
 
   async getHighRiskPredictions() {
@@ -76,7 +86,63 @@ class ApiClient {
     });
   }
 
-  // Agentic AI endpoints
+  // Enhanced Agentic AI endpoints
+  async getEnhancedAgentStatus() {
+    return this.request("/agent/agent/enhanced/status");
+  }
+
+  async getEnhancedAgentInsights() {
+    return this.request("/agent/agent/enhanced/insights");
+  }
+
+  async getEnhancedAgentPerformance() {
+    return this.request("/agent/agent/enhanced/performance");
+  }
+
+  async simulateEnhancedAgent(clientId = "client_001") {
+    return this.request(
+      `/agent/agent/enhanced/simulate?client_id=${clientId}`,
+      {
+        method: "POST",
+      }
+    );
+  }
+
+  async getEnhancedPredictionHistory(limit = 10) {
+    return this.request(
+      `/agent/agent/enhanced/predictions/history?limit=${limit}`
+    );
+  }
+
+  async getEnhancedLearnedPatterns() {
+    return this.request("/agent/agent/enhanced/patterns");
+  }
+
+  async updateEnhancedAgentLearning(incidentData) {
+    return this.request("/agent/agent/enhanced/learn", {
+      method: "POST",
+      body: JSON.stringify(incidentData),
+    });
+  }
+
+  async predictCascadeEnhanced(correlatedData) {
+    return this.request("/agent/predict/cascade/enhanced", {
+      method: "POST",
+      body: JSON.stringify(correlatedData),
+    });
+  }
+
+  async predictCascadeEnhancedSimple(clientId, alertsData) {
+    return this.request("/agent/predict/cascade/enhanced/simple", {
+      method: "POST",
+      body: JSON.stringify(alertsData),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+  }
+
+  // Legacy Agentic AI endpoints (for backward compatibility)
   async startAgent() {
     return this.request("/agent/start", { method: "POST" });
   }
@@ -86,7 +152,7 @@ class ApiClient {
   }
 
   async getAgentStatus() {
-    return this.request("/agent/status");
+    return this.request("/agent/agent/status");
   }
 
   async analyzeCascadeRisk(clientId) {
@@ -106,15 +172,15 @@ class ApiClient {
   }
 
   async getAgentInsights() {
-    return this.request("/agent/insights");
+    return this.request("/agent/agent/insights");
   }
 
   async getAgentPredictions() {
-    return this.request("/agent/predictions");
+    return this.request("/agent/agent/predictions/history");
   }
 
   async triggerAgentLearning() {
-    return this.request("/agent/learn", { method: "POST" });
+    return this.request("/agent/agent/learn", { method: "POST" });
   }
 
   async getAgentDecisions() {
@@ -122,11 +188,11 @@ class ApiClient {
   }
 
   async getAgentPatterns() {
-    return this.request("/agent/patterns");
+    return this.request("/agent/agent/patterns");
   }
 
   async simulateCascade(scenario) {
-    return this.request("/agent/simulate-cascade", {
+    return this.request("/agent/agent/simulate", {
       method: "POST",
       body: JSON.stringify(scenario),
     });

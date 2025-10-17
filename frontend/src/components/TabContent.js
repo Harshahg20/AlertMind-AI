@@ -1,10 +1,9 @@
 import React from "react";
-import Dashboard from "../pages/Dashboard";
+import OptimizedDashboard from "./OptimizedDashboard";
 import AlertFeed from "../pages/AlertFeed";
 import CascadeMap from "../pages/CascadeMap";
-import ClientOverview from "../pages/ClientOverview";
 import AgentControl from "../pages/AgentControl";
-import OperationsConsole from "../pages/OperationsConsole";
+import ClientCascadeView from "./ClientCascadeView";
 
 const TabContent = ({
   activeTab,
@@ -16,11 +15,9 @@ const TabContent = ({
   filteredData,
 }) => {
   switch (activeTab) {
-    case "ops":
-      return <OperationsConsole />;
     case "dashboard":
       return (
-        <Dashboard
+        <OptimizedDashboard
           stats={stats}
           alerts={alerts}
           predictions={predictions}
@@ -37,23 +34,8 @@ const TabContent = ({
         />
       );
     case "cascade":
-      return (
-        <CascadeMap
-          predictions={predictions}
-          clients={clients}
-          loading={loading}
-        />
-      );
-    case "clients":
-      return (
-        <ClientOverview
-          clients={clients}
-          alerts={alerts}
-          predictions={predictions}
-          loading={loading}
-        />
-      );
-    case "agent":
+      return <ClientCascadeView clients={clients} loading={loading} />;
+    case "ai":
       return <AgentControl />;
     default:
       return null;

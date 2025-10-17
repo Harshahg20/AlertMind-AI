@@ -13,6 +13,8 @@ sentence-transformers==2.2.2
 transformers==4.35.2
 torch==2.1.1
 langchain==0.0.350
-langchain-community==0.0.1
-langchain-google-genai==1.0.0
+langchain-community
+langchain-google-genai
 httpx==0.25.2
+psutil==5.9.6
+matplotlib==3.7.2
