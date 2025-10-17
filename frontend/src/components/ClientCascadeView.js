@@ -129,10 +129,18 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
       ? clients || []
       : (clients || []).filter((c) => c.id === selectedClient);
 
-  if (loading) {
+  if (loading || loadingPredictions) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-white text-lg">
+            Loading Client Cascade Analysis...
+          </p>
+          <p className="text-gray-400 text-sm mt-2">
+            Fetching predictions and AI insights
+          </p>
+        </div>
       </div>
     );
   }
@@ -289,9 +297,12 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                       {basicPreds.slice(0, 2).map((pred, idx) => (
                         <div key={idx} className="flex justify-between text-sm">
                           <span className="text-gray-300">
-                            {pred.affected_systems &&
-                            pred.affected_systems.length > 0
-                              ? pred.affected_systems[0]
+                            {(pred.affected_systems &&
+                              pred.affected_systems.length > 0) ||
+                            (pred.predicted_cascade_systems &&
+                              pred.predicted_cascade_systems.length > 0)
+                              ? pred.affected_systems?.[0] ||
+                                pred.predicted_cascade_systems?.[0]
                               : pred.pattern ||
                                 pred.pattern_matched ||
                                 "Unknown System"}
@@ -342,7 +353,16 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                   </div>
                 </div>
 
-                {basicPreds.length > 0 ? (
+                {loadingPredictions ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                      <p className="text-gray-400 text-sm">
+                        Loading predictions...
+                      </p>
+                    </div>
+                  </div>
+                ) : basicPreds.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {basicPreds.map((prediction, idx) => (
                       <div key={idx} className="bg-gray-700/30 rounded-lg p-4">
@@ -388,9 +408,14 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                               Affected Systems:
                             </span>
                             <span className="text-white text-sm">
-                              {prediction.affected_systems &&
-                              prediction.affected_systems.length > 0
-                                ? prediction.affected_systems.join(", ")
+                              {(prediction.affected_systems &&
+                                prediction.affected_systems.length > 0) ||
+                              (prediction.predicted_cascade_systems &&
+                                prediction.predicted_cascade_systems.length > 0)
+                                ? (
+                                    prediction.affected_systems ||
+                                    prediction.predicted_cascade_systems
+                                  ).join(", ")
                                 : "Unknown"}
                             </span>
                           </div>
@@ -449,7 +474,16 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                   </div>
                 </div>
 
-                {enhanced?.prediction ? (
+                {loadingPredictions ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                      <p className="text-gray-400 text-sm">
+                        Loading AI analysis...
+                      </p>
+                    </div>
+                  </div>
+                ) : enhanced?.prediction ? (
                   <div className="space-y-6">
                     {/* Prediction Summary */}
                     <div className="bg-gray-700/30 rounded-lg p-4">
