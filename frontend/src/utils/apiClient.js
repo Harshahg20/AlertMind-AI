@@ -3,6 +3,7 @@ const API_BASE_URL = "http://localhost:8000/api";
 class ApiClient {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
+    console.log(`API Request: ${options.method || 'GET'} ${url}`);
 
     try {
       const response = await fetch(url, {
@@ -13,11 +14,17 @@ class ApiClient {
         ...options,
       });
 
+      console.log(`API Response: ${response.status} ${response.statusText}`);
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`API Error Response:`, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log(`API Success:`, data);
+      return data;
     } catch (error) {
       console.error(`API request failed: ${endpoint}`, error);
       throw error;
