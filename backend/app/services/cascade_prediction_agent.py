@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import traceback
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 import httpx
@@ -492,7 +493,7 @@ Focus on temporal patterns, system dependencies, and prevention effectiveness.
             "clients_analyzed": len(client_patterns),
             "confidence_improvement": min(0.3, len(self.incident_memory) / 1000),
             "most_effective_patterns": list(self.pattern_effectiveness.keys())[:3],
-            "average_confidence": sum(i["confidence"] for i in self.incident_memory[-20:]) / min(20, len(self.incident_memory))
+            "average_confidence": sum(i.get("confidence", 0.5) for i in self.incident_memory[-20:]) / min(20, len(self.incident_memory)) if self.incident_memory else 0.5
         }
     
     def _get_agent_patterns(self) -> Dict[str, Any]:
@@ -505,14 +506,153 @@ Focus on temporal patterns, system dependencies, and prevention effectiveness.
         pattern_analysis = {}
         for pattern, incidents in self.pattern_effectiveness.items():
             if incidents:
-                avg_confidence = sum(i["confidence"] for i in incidents) / len(incidents)
+                avg_confidence = sum(i.get("confidence", 0.5) for i in incidents) / len(incidents)
                 pattern_analysis[pattern] = {
                     "occurrences": len(incidents),
                     "average_confidence": round(avg_confidence, 2),
-                    "last_seen": incidents[-1]["timestamp"]
+                    "last_seen": incidents[-1].get("timestamp", datetime.now().isoformat())
                 }
         
         return pattern_analysis
+    
+    async def trigger_intelligent_learning(self) -> Dict[str, Any]:
+        """
+        Trigger intelligent learning using Gemini model to analyze patterns and improve predictions
+        """
+        try:
+            logger.info(f"Starting intelligent learning - LLM available: {self.llm is not None}")
+            if not self.llm:
+                logger.warning("LLM not available, falling back to mock learning")
+                # Fallback to mock learning if LLM not available
+                return await self._mock_learning_cycle()
+            
+            # Prepare learning context from recent incidents
+            recent_incidents = self.incident_memory[-10:] if self.incident_memory else []
+            
+            # Create learning prompt for Gemini
+            learning_prompt = f"""
+You are an AI learning system for cascade failure prediction. Analyze the following incident data and provide insights to improve future predictions.
+
+Recent Incidents ({len(recent_incidents)}):
+{json.dumps(recent_incidents, indent=2)}
+
+Current Pattern Effectiveness:
+{json.dumps(self.pattern_effectiveness, indent=2)}
+
+Please provide:
+1. Key patterns you've identified from the incident data
+2. Confidence improvements based on historical success rates
+3. New prevention strategies that should be learned
+4. Risk factors that are becoming more prominent
+5. A confidence score (0-1) for how well the system is learning
+
+Respond in JSON format:
+{{
+    "patterns_identified": ["pattern1", "pattern2"],
+    "confidence_improvement": 0.15,
+    "new_prevention_strategies": ["strategy1", "strategy2"],
+    "emerging_risk_factors": ["risk1", "risk2"],
+    "learning_confidence": 0.85,
+    "insights": "Summary of key learning insights",
+    "recommendations": ["recommendation1", "recommendation2"]
+}}
+"""
+            
+            # Get Gemini's learning analysis
+            response = await self.llm.ainvoke(learning_prompt)
+            response_text = response.content.strip()
+            
+            # Parse JSON response
+            if response_text.startswith('```json'):
+                response_text = response_text[7:-3]
+            elif response_text.startswith('```'):
+                response_text = response_text[3:-3]
+            
+            try:
+                learning_analysis = json.loads(response_text)
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse Gemini learning response, using fallback")
+                return await self._mock_learning_cycle()
+            
+            # Create learning record with Gemini insights
+            learning_record = {
+                "timestamp": datetime.now().isoformat(),
+                "client_id": "learning_cycle",
+                "alerts": [],
+                "prevention_actions": learning_analysis.get("new_prevention_strategies", []),
+                "outcome": "learning_success",
+                "actual_cascade_time": 0,
+                "learning_type": "gemini_analysis",
+                "confidence": learning_analysis.get("learning_confidence", 0.8),
+                "gemini_insights": learning_analysis
+            }
+            
+            # Update agent memory
+            self.incident_memory.append(learning_record)
+            
+            # Update pattern effectiveness with new insights
+            for pattern in learning_analysis.get("patterns_identified", []):
+                if pattern not in self.pattern_effectiveness:
+                    self.pattern_effectiveness[pattern] = []
+                
+                self.pattern_effectiveness[pattern].append({
+                    "effectiveness_score": learning_analysis.get("learning_confidence", 0.8),
+                    "prevention_actions": learning_analysis.get("new_prevention_strategies", []),
+                    "timestamp": datetime.now().isoformat(),
+                    "confidence": learning_analysis.get("learning_confidence", 0.8),
+                    "source": "gemini_analysis"
+                })
+            
+            return {
+                "status": "intelligent_learning_completed",
+                "learning_record": learning_record,
+                "total_incidents": len(self.incident_memory),
+                "patterns_learned": len(self.pattern_effectiveness),
+                "confidence_improvement": learning_analysis.get("confidence_improvement", 0.1),
+                "gemini_insights": learning_analysis
+            }
+            
+        except Exception as e:
+            logger.error(f"Intelligent learning failed: {e}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return await self._mock_learning_cycle()
+    
+    async def _mock_learning_cycle(self) -> Dict[str, Any]:
+        """Fallback mock learning cycle when Gemini is not available"""
+        learning_record = {
+            "timestamp": datetime.now().isoformat(),
+            "client_id": "client_001",
+            "alerts": [],
+            "prevention_actions": ["Mock learning cycle triggered"],
+            "outcome": "success",
+            "actual_cascade_time": 0,
+            "learning_type": "mock_fallback",
+            "confidence": 0.6
+        }
+        
+        self.incident_memory.append(learning_record)
+        
+        # Update pattern effectiveness
+        pattern_key = f"mock_pattern_{len(self.incident_memory)}"
+        if pattern_key not in self.pattern_effectiveness:
+            self.pattern_effectiveness[pattern_key] = []
+        
+        self.pattern_effectiveness[pattern_key].append({
+            "effectiveness_score": 0.6,
+            "prevention_actions": ["Mock prevention action"],
+            "timestamp": datetime.now().isoformat(),
+            "confidence": 0.6,
+            "source": "mock_fallback"
+        })
+        
+        return {
+            "status": "mock_learning_completed",
+            "learning_record": learning_record,
+            "total_incidents": len(self.incident_memory),
+            "patterns_learned": len(self.pattern_effectiveness),
+            "confidence_improvement": 0.05,
+            "note": "Using mock learning - set GOOGLE_AI_API_KEY for intelligent learning"
+        }
     
     def _fallback_prediction(self, correlated_data: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback prediction when agent fails"""

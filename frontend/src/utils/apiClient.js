@@ -3,7 +3,7 @@ const API_BASE_URL = "http://localhost:8000/api";
 class ApiClient {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
-    console.log(`API Request: ${options.method || 'GET'} ${url}`);
+    console.log(`API Request: ${options.method || "GET"} ${url}`);
 
     try {
       const response = await fetch(url, {
@@ -19,7 +19,9 @@ class ApiClient {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`API Error Response:`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        throw new Error(
+          `HTTP error! status: ${response.status} - ${errorText}`
+        );
       }
 
       const data = await response.json();
@@ -196,6 +198,10 @@ class ApiClient {
 
   async getAgentPatterns() {
     return this.request("/agent/agent/patterns");
+  }
+
+  async getTrainingStatus() {
+    return this.request("/agent/training/status");
   }
 
   async simulateCascade(scenario) {

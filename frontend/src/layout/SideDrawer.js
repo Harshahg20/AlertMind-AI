@@ -33,7 +33,7 @@ const navItems = [
     label: "Client Cascades",
     icon: <Network className="w-5 h-5" />,
   },
-  { id: "ai", label: "AI Control", icon: <Brain className="w-5 h-5" /> },
+  { id: "ai", label: "Agent Management", icon: <Brain className="w-5 h-5" /> },
 ];
 
 const SideDrawer = ({ drawerOpen, activeTab, onChangeTab }) => {
