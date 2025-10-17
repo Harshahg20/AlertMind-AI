@@ -132,15 +132,45 @@ async def predict_cascade_simple(client_id: str, alert_ids: List[str]):
 async def get_agent_status():
     """Get current status and capabilities of the Cascade Prediction Agent"""
     try:
+        agent = get_cascade_agent()
         return {
-            "agent_name": get_cascade_agent().name,
-            "agent_created": get_cascade_agent().created_at.isoformat(),
-            "llm_available": get_cascade_agent().llm is not None,
-            "memory_size": len(get_cascade_agent().incident_memory),
-            "patterns_learned": len(get_cascade_agent().pattern_effectiveness),
-            "cross_client_insights": get_cascade_agent()._get_cross_client_insights(),
-            "agent_patterns": get_cascade_agent()._get_agent_patterns(),
-            "status": "operational"
+            "agent_name": agent.name,
+            "agent_created": agent.created_at.isoformat(),
+            "llm_available": agent.llm is not None,
+            "memory_size": len(agent.incident_memory),
+            "patterns_learned": len(agent.pattern_effectiveness),
+            "cross_client_insights": agent._get_cross_client_insights(),
+            "agent_patterns": agent._get_agent_patterns(),
+            "status": "operational",
+            "agent_running": True,  # Mock running state
+            "agent_metrics": {
+                "total_actions_taken": len(agent.incident_memory),
+                "success_rate": 85,  # Mock success rate
+                "learning_cycles": len(agent.incident_memory),
+                "agent_state": "active",
+                "confidence_threshold": 0.7,
+                "risk_tolerance": 0.6,
+                "active_clients": len(set(incident.get("client_id", "unknown") for incident in agent.incident_memory)),
+                "patterns_learned": len(agent.pattern_effectiveness),
+                "recent_decisions": len(agent.incident_memory[-10:]) if agent.incident_memory else 0
+            },
+            "agent_insights": {
+                "agent_personality": {
+                    "risk_tolerance": "moderate",
+                    "learning_speed": "fast",
+                    "confidence_level": "high"
+                },
+                "performance_analysis": {
+                    "success_rate": "85%",
+                    "efficiency": "high",
+                    "reliability": "excellent"
+                },
+                "recommendations": [
+                    "Continue monitoring system performance",
+                    "Consider expanding pattern recognition",
+                    "Maintain current confidence thresholds"
+                ]
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -331,3 +361,161 @@ async def get_learned_patterns():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Legacy Agent Control Endpoints
+@router.post("/start")
+async def start_agent():
+    """Start the cascade prediction agent"""
+    try:
+        # In a real implementation, this would start background processes
+        # For now, we'll just return a success response
+        return {
+            "status": "success",
+            "message": "Agent started successfully",
+            "agent_running": True,
+            "started_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start agent: {str(e)}")
+
+@router.post("/stop")
+async def stop_agent():
+    """Stop the cascade prediction agent"""
+    try:
+        # In a real implementation, this would stop background processes
+        # For now, we'll just return a success response
+        return {
+            "status": "success",
+            "message": "Agent stopped successfully",
+            "agent_running": False,
+            "stopped_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop agent: {str(e)}")
+
+@router.post("/analyze")
+async def analyze_cascade_risk(client_id: str):
+    """Analyze cascade risk for a specific client"""
+    try:
+        # Find client
+        client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+        if not client:
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Get alerts for the client
+        all_alerts = generate_mock_alerts()
+        client_alerts = [a for a in all_alerts if a.client_id == client_id]
+        
+        # Run agent analysis
+        agent = get_cascade_agent()
+        correlated_data = {
+            'alerts': [alert.dict() for alert in client_alerts],
+            'client': client,
+            'historical_data': HISTORICAL_INCIDENTS
+        }
+        
+        analysis_result = await agent.run(correlated_data)
+        
+        return {
+            "client_id": client_id,
+            "client_name": client.name,
+            "analysis": analysis_result,
+            "alerts_analyzed": len(client_alerts),
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@router.post("/prevent")
+async def execute_prevention(client_id: str, prevention_plan: Dict):
+    """Execute prevention actions for a client"""
+    try:
+        # Find client
+        client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+        if not client:
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        # In a real implementation, this would execute actual prevention actions
+        # For now, we'll simulate the execution
+        actions = prevention_plan.get("actions", [])
+        
+        return {
+            "status": "success",
+            "message": f"Prevention plan executed for {client.name}",
+            "client_id": client_id,
+            "actions_executed": len(actions),
+            "execution_time": datetime.now().isoformat(),
+            "prevention_plan": prevention_plan
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prevention execution failed: {str(e)}")
+
+@router.get("/decisions")
+async def get_agent_decisions():
+    """Get recent agent decisions"""
+    try:
+        agent = get_cascade_agent()
+        recent_decisions = agent.incident_memory[-10:] if agent.incident_memory else []
+        
+        return {
+            "decisions": recent_decisions,
+            "total_decisions": len(agent.incident_memory),
+            "retrieved_count": len(recent_decisions)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get decisions: {str(e)}")
+
+@router.post("/resolution-playbook")
+async def get_resolution_playbook(client_id: str):
+    """Get resolution playbook for a client"""
+    try:
+        # Find client
+        client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+        if not client:
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Generate a mock resolution playbook
+        playbook = {
+            "client_id": client_id,
+            "client_name": client.name,
+            "playbook": {
+                "database_issues": [
+                    "Check connection pool status",
+                    "Restart database service if needed",
+                    "Scale database resources",
+                    "Check for blocking queries"
+                ],
+                "network_issues": [
+                    "Check network connectivity",
+                    "Restart network services",
+                    "Check firewall rules",
+                    "Monitor bandwidth usage"
+                ],
+                "application_issues": [
+                    "Check application logs",
+                    "Restart application services",
+                    "Check resource usage",
+                    "Verify configuration"
+                ],
+                "storage_issues": [
+                    "Check disk space",
+                    "Clean up temporary files",
+                    "Scale storage if needed",
+                    "Check I/O performance"
+                ]
+            },
+            "generated_at": datetime.now().isoformat()
+        }
+        
+        return playbook
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get playbook: {str(e)}")

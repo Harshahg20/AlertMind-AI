@@ -3,6 +3,7 @@ const API_BASE_URL = "http://localhost:8000/api";
 class ApiClient {
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
+    console.log(`API Request: ${options.method || 'GET'} ${url}`);
 
     try {
       const response = await fetch(url, {
@@ -13,11 +14,17 @@ class ApiClient {
         ...options,
       });
 
+      console.log(`API Response: ${response.status} ${response.statusText}`);
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`API Error Response:`, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log(`API Success:`, data);
+      return data;
     } catch (error) {
       console.error(`API request failed: ${endpoint}`, error);
       throw error;
@@ -88,20 +95,20 @@ class ApiClient {
 
   // Enhanced Agentic AI endpoints
   async getEnhancedAgentStatus() {
-    return this.request("/agent/agent/enhanced/status");
+    return this.request("/agent/enhanced/agent/enhanced/status");
   }
 
   async getEnhancedAgentInsights() {
-    return this.request("/agent/agent/enhanced/insights");
+    return this.request("/agent/enhanced/agent/enhanced/insights");
   }
 
   async getEnhancedAgentPerformance() {
-    return this.request("/agent/agent/enhanced/performance");
+    return this.request("/agent/enhanced/agent/enhanced/performance");
   }
 
   async simulateEnhancedAgent(clientId = "client_001") {
     return this.request(
-      `/agent/agent/enhanced/simulate?client_id=${clientId}`,
+      `/agent/enhanced/agent/enhanced/simulate?client_id=${clientId}`,
       {
         method: "POST",
       }
@@ -110,30 +117,30 @@ class ApiClient {
 
   async getEnhancedPredictionHistory(limit = 10) {
     return this.request(
-      `/agent/agent/enhanced/predictions/history?limit=${limit}`
+      `/agent/enhanced/agent/enhanced/predictions/history?limit=${limit}`
     );
   }
 
   async getEnhancedLearnedPatterns() {
-    return this.request("/agent/agent/enhanced/patterns");
+    return this.request("/agent/enhanced/agent/enhanced/patterns");
   }
 
   async updateEnhancedAgentLearning(incidentData) {
-    return this.request("/agent/agent/enhanced/learn", {
+    return this.request("/agent/enhanced/agent/enhanced/learn", {
       method: "POST",
       body: JSON.stringify(incidentData),
     });
   }
 
   async predictCascadeEnhanced(correlatedData) {
-    return this.request("/agent/predict/cascade/enhanced", {
+    return this.request("/agent/enhanced/predict/cascade/enhanced", {
       method: "POST",
       body: JSON.stringify(correlatedData),
     });
   }
 
   async predictCascadeEnhancedSimple(clientId, alertsData) {
-    return this.request("/agent/predict/cascade/enhanced/simple", {
+    return this.request("/agent/enhanced/predict/cascade/enhanced/simple", {
       method: "POST",
       body: JSON.stringify(alertsData),
       headers: {

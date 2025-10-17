@@ -11,6 +11,7 @@ const AgentControl = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeView, setActiveView] = useState("legacy");
+  const [connectionStatus, setConnectionStatus] = useState("unknown");
 
   useEffect(() => {
     fetchAgentData();
@@ -20,18 +21,51 @@ const AgentControl = () => {
 
   const fetchAgentData = async () => {
     try {
+      console.log("Fetching agent data...");
       const [status, insights, predictions] = await Promise.all([
         apiClient.getAgentStatus(),
         apiClient.getAgentInsights(),
         apiClient.getAgentPredictions(),
       ]);
 
+      console.log("Agent status received:", status);
       setAgentStatus(status);
       setAgentMetrics(status.agent_metrics);
       setAgentInsights(status.agent_insights);
       setAgentPredictions(predictions.predictions || []);
+      setConnectionStatus("connected");
     } catch (error) {
       console.error("Error fetching agent data:", error);
+      console.log("Using fallback state...");
+      // Set default state if API calls fail - start with agent stopped
+      setAgentStatus({
+        agent_running: false,
+        agent_metrics: {
+          total_actions_taken: 0,
+          success_rate: 0,
+          learning_cycles: 0,
+          agent_state: "stopped",
+          confidence_threshold: 0.7,
+          risk_tolerance: 0.6,
+          active_clients: 0,
+          patterns_learned: 0,
+          recent_decisions: 0
+        },
+        agent_insights: {
+          agent_personality: {
+            risk_tolerance: "moderate",
+            learning_speed: "normal",
+            confidence_level: "medium"
+          },
+          performance_analysis: {
+            success_rate: "0%",
+            efficiency: "unknown",
+            reliability: "unknown"
+          },
+          recommendations: []
+        }
+      });
+      setConnectionStatus("disconnected");
     } finally {
       setLoading(false);
     }
@@ -40,24 +74,55 @@ const AgentControl = () => {
   const handleStartAgent = async () => {
     setActionLoading(true);
     try {
-      await apiClient.startAgent();
+      const response = await apiClient.startAgent();
+      console.log("Start agent response:", response);
+      
+      // Update local state immediately
+      setAgentStatus(prev => ({
+        ...prev,
+        agent_running: true,
+        agent_metrics: {
+          ...prev.agent_metrics,
+          agent_state: "active"
+        }
+      }));
+      
+      // Refresh data from server
       await fetchAgentData();
     } catch (error) {
       console.error("Error starting agent:", error);
-      alert("Failed to start agent");
+      alert("Failed to start agent: " + (error.message || "Unknown error"));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleStopAgent = async () => {
+    console.log("handleStopAgent called!");
     setActionLoading(true);
     try {
-      await apiClient.stopAgent();
+      console.log("Calling apiClient.stopAgent()...");
+      const response = await apiClient.stopAgent();
+      console.log("Stop agent response:", response);
+      
+      // Update local state immediately
+      console.log("Updating local state...");
+      setAgentStatus(prev => ({
+        ...prev,
+        agent_running: false,
+        agent_metrics: {
+          ...prev.agent_metrics,
+          agent_state: "stopped"
+        }
+      }));
+      
+      console.log("Refreshing data from server...");
+      // Refresh data from server
       await fetchAgentData();
+      console.log("Stop agent completed successfully!");
     } catch (error) {
       console.error("Error stopping agent:", error);
-      alert("Failed to stop agent");
+      alert("Failed to stop agent: " + (error.message || "Unknown error"));
     } finally {
       setActionLoading(false);
     }
@@ -138,21 +203,67 @@ const AgentControl = () => {
                 <p className="text-gray-400 text-sm">
                   Control and monitor the cascade prevention AI agent
                 </p>
+                {/* Status info */}
+                <div className={`text-xs mt-2 ${
+                  connectionStatus === "connected" ? "text-green-400" : 
+                  connectionStatus === "disconnected" ? "text-red-400" : 
+                  "text-yellow-400"
+                }`}>
+                  Status: {connectionStatus === "connected" ? "Connected" : "Disconnected"}
+                </div>
               </div>
               <div className="flex space-x-3">
                 <button
-                  onClick={handleStartAgent}
-                  disabled={actionLoading || agentStatus?.agent_running}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-colors"
+                  onClick={async () => {
+                    console.log("Button clicked! Current agent_running:", agentStatus?.agent_running);
+                    console.log("actionLoading:", actionLoading);
+                    
+                    if (actionLoading) {
+                      console.log("Button is disabled due to loading state");
+                      return;
+                    }
+                    
+                    if (agentStatus?.agent_running) {
+                      console.log("Calling handleStopAgent");
+                      await handleStopAgent();
+                    } else {
+                      console.log("Calling handleStartAgent");
+                      await handleStartAgent();
+                    }
+                  }}
+                  disabled={actionLoading}
+                  className={`px-6 py-2 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-colors font-medium ${
+                    agentStatus?.agent_running 
+                      ? "bg-red-600 hover:bg-red-700" 
+                      : "bg-green-600 hover:bg-green-700"
+                  }`}
                 >
-                  {actionLoading ? "Starting..." : "Start Agent"}
+                  {actionLoading 
+                    ? (agentStatus?.agent_running ? "Stopping Training..." : "Starting Training...") 
+                    : (agentStatus?.agent_running ? "Stop Agent Training" : "Start Agent Training")
+                  }
                 </button>
+                
+                {/* Debug test button */}
                 <button
-                  onClick={handleStopAgent}
-                  disabled={actionLoading || !agentStatus?.agent_running}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-colors"
+                  onClick={async () => {
+                    console.log("Test stop button clicked");
+                    try {
+                      const response = await fetch("http://localhost:8000/api/agent/stop", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" }
+                      });
+                      const data = await response.json();
+                      console.log("Direct stop test response:", data);
+                      alert("Direct Stop Test: " + JSON.stringify(data, null, 2));
+                    } catch (error) {
+                      console.error("Direct stop test error:", error);
+                      alert("Direct Stop Test Error: " + error.message);
+                    }
+                  }}
+                  className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs rounded"
                 >
-                  {actionLoading ? "Stopping..." : "Stop Agent"}
+                  Test Stop
                 </button>
               </div>
             </div>
