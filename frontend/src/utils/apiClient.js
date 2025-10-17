@@ -88,20 +88,20 @@ class ApiClient {
 
   // Enhanced Agentic AI endpoints
   async getEnhancedAgentStatus() {
-    return this.request("/agent/agent/enhanced/status");
+    return this.request("/agent/enhanced/agent/enhanced/status");
   }
 
   async getEnhancedAgentInsights() {
-    return this.request("/agent/agent/enhanced/insights");
+    return this.request("/agent/enhanced/agent/enhanced/insights");
   }
 
   async getEnhancedAgentPerformance() {
-    return this.request("/agent/agent/enhanced/performance");
+    return this.request("/agent/enhanced/agent/enhanced/performance");
   }
 
   async simulateEnhancedAgent(clientId = "client_001") {
     return this.request(
-      `/agent/agent/enhanced/simulate?client_id=${clientId}`,
+      `/agent/enhanced/agent/enhanced/simulate?client_id=${clientId}`,
       {
         method: "POST",
       }
@@ -110,30 +110,30 @@ class ApiClient {
 
   async getEnhancedPredictionHistory(limit = 10) {
     return this.request(
-      `/agent/agent/enhanced/predictions/history?limit=${limit}`
+      `/agent/enhanced/agent/enhanced/predictions/history?limit=${limit}`
     );
   }
 
   async getEnhancedLearnedPatterns() {
-    return this.request("/agent/agent/enhanced/patterns");
+    return this.request("/agent/enhanced/agent/enhanced/patterns");
   }
 
   async updateEnhancedAgentLearning(incidentData) {
-    return this.request("/agent/agent/enhanced/learn", {
+    return this.request("/agent/enhanced/agent/enhanced/learn", {
       method: "POST",
       body: JSON.stringify(incidentData),
     });
   }
 
   async predictCascadeEnhanced(correlatedData) {
-    return this.request("/agent/predict/cascade/enhanced", {
+    return this.request("/agent/enhanced/predict/cascade/enhanced", {
       method: "POST",
       body: JSON.stringify(correlatedData),
     });
   }
 
   async predictCascadeEnhancedSimple(clientId, alertsData) {
-    return this.request("/agent/predict/cascade/enhanced/simple", {
+    return this.request("/agent/enhanced/predict/cascade/enhanced/simple", {
       method: "POST",
       body: JSON.stringify(alertsData),
       headers: {

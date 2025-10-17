@@ -1,18 +1,9 @@
 import React, { useState, useEffect } from "react";
 import {
   Brain,
-  Activity,
   TrendingUp,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
   BarChart3,
   Zap,
-  Shield,
-  RefreshCw,
-  Play,
-  BookOpen,
 } from "lucide-react";
 import { apiClient } from "../utils/apiClient";
 
