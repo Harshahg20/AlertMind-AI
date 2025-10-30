@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution, enhanced_agentic
+from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution, enhanced_agentic, enhanced_patch_management, it_administrative_tasks
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,6 +30,8 @@ app.include_router(patch.router, prefix="/api/patch", tags=["patch-management"])
 app.include_router(alert_correlation_agent.router, prefix="/api/alert-correlation", tags=["alert-correlation-agent"])
 app.include_router(autonomous_decision.router, prefix="/api/autonomous-decision", tags=["autonomous-decision-agent"])
 app.include_router(prevention_execution.router, prefix="/api/prevention-execution", tags=["prevention-execution-agent"])
+app.include_router(enhanced_patch_management.router, prefix="/api/enhanced-patch", tags=["enhanced-patch-management"])
+app.include_router(it_administrative_tasks.router, prefix="/api/it-admin", tags=["it-administrative-tasks"])
 
 @app.get("/")
 def read_root():

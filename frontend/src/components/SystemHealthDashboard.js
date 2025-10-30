@@ -5,17 +5,10 @@ import {
   MemoryStick,
   HardDrive,
   Wifi,
-  Activity,
   RefreshCw,
-  CheckCircle,
-  AlertTriangle,
-  XCircle,
-  Clock,
   Server,
-  Database,
-  Globe,
 } from "lucide-react";
-import { apiClient } from "../utils/apiClient";
+import { SystemHealthSkeleton } from "./SkeletonLoader";
 
 const SystemHealthDashboard = () => {
   const [systemMetrics, setSystemMetrics] = useState(null);
@@ -168,14 +161,7 @@ const SystemHealthDashboard = () => {
   };
 
   if (loading && !systemMetrics) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-white">Loading System Health...</p>
-        </div>
-      </div>
-    );
+    return <SystemHealthSkeleton />;
   }
 
   if (error) {

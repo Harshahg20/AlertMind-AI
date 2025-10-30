@@ -10,14 +10,13 @@ import {
   TrendingUp,
   Shield,
   Clock,
-  CheckCircle,
   XCircle,
   AlertCircle,
   Info,
 } from "lucide-react";
-import { apiClient } from "../utils/apiClient";
 import EnhancedAIInsights from "./EnhancedAIInsights";
 import SystemHealthDashboard from "./SystemHealthDashboard";
+import { DashboardSkeleton } from "./SkeletonLoader";
 
 const OptimizedDashboard = ({
   stats,
@@ -80,11 +79,7 @@ const OptimizedDashboard = ({
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const highRiskPredictions = predictions.filter(
@@ -255,15 +250,22 @@ const OptimizedDashboard = ({
               </div>
               {filteredData && (
                 <div className="mt-2">
-                  <p className={`text-sm flex items-center ${
-                    filteredData.summary.noise_reduction_percent >= 0 
-                      ? 'text-green-400' 
-                      : 'text-red-400'
-                  }`}>
+                  <p
+                    className={`text-sm flex items-center ${
+                      filteredData.summary.noise_reduction_percent >= 0
+                        ? "text-green-400"
+                        : "text-red-400"
+                    }`}
+                  >
                     <TrendingUp className="w-3 h-3 mr-1" />
-                    {filteredData.summary.noise_reduction_percent >= 0 ? '↓' : '↑'}{" "}
-                    {Math.abs(filteredData.summary.noise_reduction_percent)}% noise
-                    {filteredData.summary.noise_reduction_percent >= 0 ? ' filtered' : ' increased'}
+                    {filteredData.summary.noise_reduction_percent >= 0
+                      ? "↓"
+                      : "↑"}{" "}
+                    {Math.abs(filteredData.summary.noise_reduction_percent)}%
+                    noise
+                    {filteredData.summary.noise_reduction_percent >= 0
+                      ? " filtered"
+                      : " increased"}
                   </p>
                 </div>
               )}

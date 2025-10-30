@@ -9,12 +9,10 @@ import {
   HardDrive,
   Server,
   Filter,
-  Search,
-  Clock,
   Users,
   Activity,
 } from "lucide-react";
-import { apiClient } from "../utils/apiClient";
+import { AlertFeedSkeleton } from "../components/SkeletonLoader";
 
 const AlertFeed = ({ alerts, filteredData, loading }) => {
   const [selectedFilter, setSelectedFilter] = useState("all");
@@ -26,11 +24,7 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
   }, [alerts]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <AlertFeedSkeleton />;
   }
 
   const getSeverityColor = (severity) => {
@@ -76,9 +70,14 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
     }
   };
 
-  // Get unique clients for filter dropdown
+  // Get unique clients for filter dropdown from both critical and noise alerts
+  const allAlertsForClients = [
+    ...(filteredData ? filteredData.critical_alerts || [] : []),
+    ...(filteredData ? filteredData.noise_alerts || [] : []),
+    ...(alerts || []),
+  ];
   const uniqueClients = [
-    ...new Set((alerts || []).map((alert) => alert.client_name)),
+    ...new Set(allAlertsForClients.map((alert) => alert.client_name)),
   ];
 
   // Filter alerts based on selected filters
@@ -90,23 +89,35 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
     return true;
   });
 
-  const handleClientChange = async (clientName) => {
+  const handleClientChange = (clientName) => {
     setSelectedClient(clientName);
-
-    if (clientName === "all") {
-      setClientAlerts(alerts || []);
-      return;
-    }
-
-    // Filter alerts by client name locally for simplicity
-    const filtered = (alerts || []).filter((a) => a.client_name === clientName);
-    setClientAlerts(filtered);
   };
 
-  const criticalAlerts = filteredData
-    ? filteredData.critical_alerts
-    : filteredAlerts.filter((a) => !a.is_noise);
-  const noiseAlerts = filteredData ? filteredData.noise_alerts : [];
+  const handleFilterChange = (filterValue) => {
+    setSelectedFilter(filterValue);
+  };
+
+  // Get the base alerts to work with
+  const baseAlerts = filteredData ? filteredData.critical_alerts : clientAlerts;
+
+  // Apply client and severity filters to the base alerts
+  const criticalAlerts = baseAlerts.filter((alert) => {
+    if (selectedFilter !== "all" && alert.severity !== selectedFilter)
+      return false;
+    if (selectedClient !== "all" && alert.client_name !== selectedClient)
+      return false;
+    return true;
+  });
+
+  // Apply filters to noise alerts as well
+  const baseNoiseAlerts = filteredData ? filteredData.noise_alerts : [];
+  const noiseAlerts = baseNoiseAlerts.filter((alert) => {
+    if (selectedFilter !== "all" && alert.severity !== selectedFilter)
+      return false;
+    if (selectedClient !== "all" && alert.client_name !== selectedClient)
+      return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -125,18 +136,20 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
 
           {filteredData && (
             <div className="text-right">
-              <div className={`text-2xl font-bold ${
-                filteredData.summary.noise_reduction_percent >= 0 
-                  ? 'text-green-400' 
-                  : 'text-red-400'
-              }`}>
-                {filteredData.summary.noise_reduction_percent >= 0 ? '-' : '+'}
+              <div
+                className={`text-2xl font-bold ${
+                  filteredData.summary.noise_reduction_percent >= 0
+                    ? "text-green-400"
+                    : "text-red-400"
+                }`}
+              >
+                {filteredData.summary.noise_reduction_percent >= 0 ? "-" : "+"}
                 {Math.abs(filteredData.summary.noise_reduction_percent)}%
               </div>
               <div className="text-sm text-gray-400">
-                {filteredData.summary.noise_reduction_percent >= 0 
-                  ? 'Alert noise reduced' 
-                  : 'Alert noise increased'}
+                {filteredData.summary.noise_reduction_percent >= 0
+                  ? "Alert noise reduced"
+                  : "Alert noise increased"}
               </div>
             </div>
           )}
@@ -144,12 +157,36 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
 
         {/* Filter Controls */}
         <div className="flex flex-wrap gap-4 mb-4">
+          {(selectedFilter !== "all" || selectedClient !== "all") && (
+            <div className="flex items-center space-x-2 text-sm text-blue-400">
+              <span>🔍 Filters Active:</span>
+              {selectedFilter !== "all" && (
+                <span className="px-2 py-1 bg-blue-600 text-white rounded text-xs">
+                  Severity: {selectedFilter}
+                </span>
+              )}
+              {selectedClient !== "all" && (
+                <span className="px-2 py-1 bg-blue-600 text-white rounded text-xs">
+                  Client: {selectedClient}
+                </span>
+              )}
+              <button
+                onClick={() => {
+                  setSelectedFilter("all");
+                  setSelectedClient("all");
+                }}
+                className="px-2 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs transition-colors"
+              >
+                Clear All
+              </button>
+            </div>
+          )}
           <div className="flex items-center space-x-2">
             <Filter className="w-4 h-4 text-gray-400" />
             <label className="text-sm text-gray-400">Severity:</label>
             <select
               value={selectedFilter}
-              onChange={(e) => setSelectedFilter(e.target.value)}
+              onChange={(e) => handleFilterChange(e.target.value)}
               className="bg-gray-700 text-white px-3 py-1 rounded border border-gray-600 text-sm"
             >
               <option value="all">All Severities</option>
@@ -188,9 +225,9 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
             </div>
             <div className="text-center p-3 bg-green-900/20 rounded border border-green-500/20">
               <div className="text-lg font-bold text-green-400">
-                {filteredData.summary.critical_alerts}
+                {criticalAlerts.length}
               </div>
-              <div className="text-xs text-gray-400">After Filtering</div>
+              <div className="text-xs text-gray-400">Filtered Critical</div>
             </div>
             <div className="text-center p-3 bg-blue-900/20 rounded border border-blue-500/20">
               <div className="text-lg font-bold text-blue-400">
@@ -200,9 +237,9 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
             </div>
             <div className="text-center p-3 bg-yellow-900/20 rounded border border-yellow-500/20">
               <div className="text-lg font-bold text-yellow-400">
-                {filteredData.summary.noise_filtered}
+                {noiseAlerts.length}
               </div>
-              <div className="text-xs text-gray-400">Noise Filtered</div>
+              <div className="text-xs text-gray-400">Filtered Noise</div>
             </div>
           </div>
         )}

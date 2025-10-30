@@ -316,7 +316,7 @@ class EnhancedCascadePredictionAgent:
             "enhanced_analysis": {
                 "comprehensive_data_used": comprehensive_data.get('data_quality', {}).get('completeness', 0) > 0.8,
                 "system_health_score": self._calculate_system_health_score(comprehensive_data),
-                "data_sources_count": len(comprehensive_data.get('collection_metadata', {}).get('sources_available', [])),
+                "data_sources_count": comprehensive_data.get('collection_metadata', {}).get('sources_available', 0),
                 "trend_analysis_available": comprehensive_data.get('trend_analysis', {}).get('trends_available', False),
                 "external_factors_considered": comprehensive_data.get('external_factors') is not None,
                 "llm_analysis_quality": llm_reasoning.get('enhanced_analysis', {}).get('prediction_quality', 'unknown')
