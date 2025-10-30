@@ -1,19 +1,7 @@
 import React, { useState, useEffect } from "react";
-import {
-  Network,
-  AlertTriangle,
-  Clock,
-  Activity,
-  Shield,
-  RefreshCw,
-  Play,
-  BookOpen,
-  X,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-} from "lucide-react";
+import { Network, Activity, RefreshCw, Play, BookOpen, X } from "lucide-react";
 import { apiClient } from "../utils/apiClient";
+import { CascadeMapSkeleton } from "./SkeletonLoader";
 
 const EnhancedCascadeMap = ({
   predictions = [],
@@ -91,14 +79,7 @@ const EnhancedCascadeMap = ({
   };
 
   if (loading || loadingEnhanced) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-white">Loading Enhanced Cascade Analysis...</p>
-        </div>
-      </div>
-    );
+    return <CascadeMapSkeleton />;
   }
 
   return (

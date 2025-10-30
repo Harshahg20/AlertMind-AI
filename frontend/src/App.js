@@ -4,6 +4,7 @@ import { Box, Typography, useTheme } from "@mui/material";
 import Layout from "./layout/Layout";
 import TabContent from "./components/TabContent";
 import { useAppData } from "./hooks/useAppData";
+import { AppLoadingSkeleton } from "./components/SkeletonLoader";
 
 function App() {
   const theme = useTheme();
@@ -19,14 +20,7 @@ function App() {
   } = useAppData();
 
   if (loading && alerts.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-white">Loading CascadeGuard AI...</p>
-        </div>
-      </div>
-    );
+    return <AppLoadingSkeleton />;
   }
 
   return (

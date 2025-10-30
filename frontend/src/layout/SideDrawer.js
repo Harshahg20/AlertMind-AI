@@ -14,7 +14,14 @@ import {
   Box,
   useTheme,
 } from "@mui/material";
-import { BarChart3, AlertTriangle, Network, Brain, Shield } from "lucide-react";
+import {
+  BarChart3,
+  AlertTriangle,
+  Network,
+  Brain,
+  Shield,
+  Settings,
+} from "lucide-react";
 import { drawerWidthExpanded, drawerWidthCollapsed } from "./constants";
 
 const navItems = [
@@ -34,6 +41,16 @@ const navItems = [
     icon: <Network className="w-5 h-5" />,
   },
   { id: "ai", label: "Agent Management", icon: <Brain className="w-5 h-5" /> },
+  {
+    id: "patch",
+    label: "Patch Management",
+    icon: <Shield className="w-5 h-5" />,
+  },
+  {
+    id: "admin",
+    label: "IT Admin Tasks",
+    icon: <Settings className="w-5 h-5" />,
+  },
 ];
 
 const SideDrawer = ({ drawerOpen, activeTab, onChangeTab }) => {
