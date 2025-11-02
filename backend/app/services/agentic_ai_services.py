@@ -21,17 +21,15 @@ class AgenticAIService:
     def __init__(self, api_key: Optional[str] = None):
         # Get API key from environment variable or parameter
         import os
-        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY") or "demo_key"
+        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key.")
         
         # Initialize Gemini with correct model name
-        if self.api_key != "demo_key":
-            genai.configure(api_key=self.api_key)
-            # Use the correct model name for Gemini 1.5
-            self.model = genai.GenerativeModel('gemini-1.5-pro')
-            logger.info("✅ Gemini 1.5 Pro model loaded successfully")
-        else:
-            self.model = None
-            logger.warning("Using mock AI responses - set GOOGLE_AI_API_KEY for real predictions")
+        genai.configure(api_key=self.api_key)
+        # Use the correct model name for Gemini 1.5
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        logger.info("✅ Gemini 1.5 Pro model loaded successfully")
         
         # AI Agent memory for cross-client learning
         self.incident_memory = []
@@ -214,11 +212,10 @@ class AgenticAIService:
             # Prepare context for AI analysis
             analysis_context = self._prepare_analysis_context(alerts, client, historical_data)
             
-            # Get AI insights (mock or real)
-            if self.model:
-                ai_insights = await self._get_gemini_insights(analysis_context)
-            else:
-                ai_insights = self._get_mock_ai_insights(analysis_context)
+            # Get AI insights (must be real Gemini)
+            if not self.model:
+                raise RuntimeError("Gemini model not initialized")
+            ai_insights = await self._get_gemini_insights(analysis_context)
             
             # Process AI insights into actionable predictions
             cascade_analysis = self._process_ai_insights(ai_insights, alerts, client)
@@ -340,52 +337,7 @@ class AgenticAIService:
             
         except Exception as e:
             logger.error(f"Gemini API error: {e}")
-            return self._get_mock_ai_insights(context)
-    
-    def _get_mock_ai_insights(self, context: str) -> Dict:
-        """Generate mock AI insights for demo purposes"""
-        
-        # Extract key info from context for realistic mock response
-        alert_count = context.count('"severity"')
-        critical_alerts = context.count('"critical"')
-        warning_alerts = context.count('"warning"')
-        
-        # Simulate AI analysis based on alert patterns
-        cascade_probability = min(0.95, 0.3 + (critical_alerts * 0.2) + (warning_alerts * 0.1))
-        
-        if cascade_probability > 0.8:
-            urgency = "critical"
-            time_to_cascade = np.random.randint(5, 15)
-        elif cascade_probability > 0.6:
-            urgency = "high"
-            time_to_cascade = np.random.randint(10, 25)
-        elif cascade_probability > 0.4:
-            urgency = "medium"
-            time_to_cascade = np.random.randint(20, 40)
-        else:
-            urgency = "low"
-            time_to_cascade = np.random.randint(30, 60)
-        
-        # Mock intelligent analysis
-        mock_insights = {
-            "cascade_probability": round(cascade_probability, 2),
-            "time_to_cascade_minutes": time_to_cascade,
-            "predicted_cascade_sequence": ["database", "web-app", "api-gateway", "user-interface"][:int(cascade_probability * 5)],
-            "confidence_level": round(0.7 + (cascade_probability * 0.2), 2),
-            "root_cause_analysis": f"AI detected {critical_alerts} critical and {warning_alerts} warning alerts forming a cascade pattern. Database performance degradation is triggering application slowdowns, which will likely cascade to user-facing services within {time_to_cascade} minutes.",
-            "prevention_recommendations": [
-                "Immediately scale database resources",
-                "Implement connection pooling optimization",
-                "Activate load balancer failover to secondary systems",
-                "Preemptively restart application services to clear connection backlog"
-            ],
-            "similar_historical_incidents": np.random.randint(3, 12),
-            "cross_client_insights": f"This pattern has been observed in {np.random.randint(2, 5)} other clients with similar infrastructure. Historical data shows 87% success rate when prevention actions are taken within {time_to_cascade//2} minutes.",
-            "urgency_level": urgency,
-            "business_impact_assessment": f"HIGH IMPACT: Predicted cascade will affect {len(['database', 'web-app', 'api-gateway'])} critical business systems, potentially causing {np.random.randint(30, 120)} minutes of service disruption and affecting {np.random.randint(100, 500)} users."
-        }
-        
-        return mock_insights
+            raise
     
     def _process_ai_insights(self, ai_insights: Dict, alerts: List[Alert], 
                            client: Client) -> Dict:

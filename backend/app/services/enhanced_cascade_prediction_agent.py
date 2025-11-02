@@ -8,7 +8,7 @@ import json
 import logging
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
-from langchain_google_genai import ChatGoogleGenerativeAI
+import google.generativeai as genai
 
 from app.models.alert import Alert, Client, CascadePrediction
 from app.services.cascade_prediction import CascadePredictionEngine
@@ -28,16 +28,12 @@ class EnhancedCascadePredictionAgent:
         self.created_at = datetime.now()
         
         # Initialize LLM
-        self.api_key = api_key or "demo_key"
-        if self.api_key != "demo_key":
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
-                temperature=0.1,  # Lower temperature for more consistent predictions
-                google_api_key=self.api_key
-            )
-        else:
-            self.llm = None
-            logger.warning("Using mock LLM responses - set GOOGLE_AI_API_KEY for real predictions")
+        import os
+        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key.")
+        genai.configure(api_key=self.api_key)
+        self.llm = genai.GenerativeModel('gemini-2.5-flash')
         
         # Initialize services
         self.prediction_engine = CascadePredictionEngine()
@@ -83,11 +79,8 @@ class EnhancedCascadePredictionAgent:
             # Step 4: Create optimized prompt
             optimized_prompt = self.prompt_optimizer.create_optimized_prompt(rich_context)
             
-            # Step 5: Get LLM reasoning with rich context
-            if self.llm:
-                llm_reasoning = await self._get_enhanced_llm_reasoning(optimized_prompt)
-            else:
-                llm_reasoning = self._get_mock_llm_reasoning(rich_context)
+            # Step 5: Get LLM reasoning with rich context (no mock fallback)
+            llm_reasoning = await self._get_enhanced_llm_reasoning(optimized_prompt)
             
             # Step 6: Combine predictions with enhanced analysis
             enhanced_prediction = self._combine_enhanced_predictions(
@@ -173,12 +166,9 @@ class EnhancedCascadePredictionAgent:
     async def _get_enhanced_llm_reasoning(self, optimized_prompt: str) -> Dict[str, Any]:
         """Get enhanced LLM reasoning with optimized prompt"""
         try:
-            if not self.llm:
-                return self._get_mock_llm_reasoning({})
-            
             # Use the optimized prompt for better results
-            response = await self.llm.ainvoke(optimized_prompt)
-            response_text = response.content.strip()
+            response = await self.llm.generate_content_async(optimized_prompt)
+            response_text = response.text.strip()
             
             # Parse JSON response
             if response_text.startswith('```json'):
@@ -199,7 +189,7 @@ class EnhancedCascadePredictionAgent:
                 
         except Exception as e:
             logger.error(f"Enhanced LLM reasoning failed: {e}")
-            return self._get_mock_llm_reasoning({})
+            raise
     
     def _validate_and_enhance_llm_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and enhance LLM response"""
@@ -476,29 +466,7 @@ class EnhancedCascadePredictionAgent:
             "performance_metrics": self.performance_metrics
         }
     
-    def _get_mock_llm_reasoning(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate mock LLM reasoning for demo purposes"""
-        # Infer pattern from context or use default
-        inferred_pattern = self._infer_pattern_from_context(context)
-        
-        return {
-            "predicted_in": 20,
-            "confidence": 0.65,
-            "root_causes": ["Mock AI detected system resource constraints"],
-            "summary": "Mock AI analysis indicates potential cascade within 20 minutes due to resource exhaustion patterns.",
-            "urgency_level": "high",
-            "affected_systems": ["database", "web-app"],
-            "prevention_actions": ["Scale resources", "Restart services"],
-            "business_impact": "Moderate business impact expected",
-            "pattern": inferred_pattern,  # Add pattern field
-            "reasoning": {
-                "system_health_score": 65,
-                "resource_exhaustion_risk": "high",
-                "dependency_chain_analysis": "Database dependency chain at risk",
-                "temporal_patterns": "Increasing resource usage pattern detected",
-                "external_factors": "No significant external factors"
-            }
-        }
+    
     
     def _infer_pattern_from_combined_data(
         self, 

@@ -135,13 +135,26 @@ class ITAdministrativeAgent:
         self.version = "2.0.0"
         self.created_at = datetime.now()
         
-        # Initialize Gemini LLM
-        self.api_key = api_key or "demo_key"
-        if self.api_key != "demo_key":
+        # Initialize Gemini LLM (required)
+        import os
+        from dotenv import load_dotenv
+        from pathlib import Path
+        
+        # Load environment variables from .env file
+        backend_dir = Path(__file__).resolve().parents[2]
+        load_dotenv(backend_dir / ".env")
+        load_dotenv(backend_dir / "settings.env")
+        
+        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
+        if not self.api_key:
+            logger.warning("GOOGLE_AI_API_KEY not set. Agent will use fallback mode.")
+            self.model = None
+            self.llm_available = False
+        else:
             try:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(
-                    'gemini-1.5-pro',
+                    'gemini-2.5-flash',
                     safety_settings={
                         HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
                         HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
@@ -150,14 +163,11 @@ class ITAdministrativeAgent:
                     }
                 )
                 self.llm_available = True
-                logger.info("✅ Gemini 1.5 Pro loaded for IT administrative tasks")
+                logger.info("✅ Gemini 2.5 Flash loaded for IT administrative tasks")
             except Exception as e:
-                logger.error(f"❌ Failed to load Gemini: {e}")
+                logger.warning(f"❌ Failed to load Gemini: {e}. Using fallback mode.")
+                self.model = None
                 self.llm_available = False
-        else:
-            self.model = None
-            self.llm_available = False
-            logger.warning("Using mock AI responses - set GOOGLE_AI_API_KEY for real analysis")
         
         # Agent memory and learning
         self.task_history = []
@@ -174,6 +184,7 @@ class ITAdministrativeAgent:
         """Generate intelligent task recommendations based on client environment and AI analysis"""
         
         if not self.llm_available:
+            logger.info(f"LLM not available, using fallback task generation for {client.id}")
             return self._fallback_task_generation(client)
         
         try:
@@ -232,34 +243,62 @@ class ITAdministrativeAgent:
             """
             
             response = await self.model.generate_content_async(prompt)
-            ai_recommendations = json.loads(response.text)
+            response_text = response.text.strip()
+            
+            # Try to extract JSON from markdown code blocks if present
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+            
+            try:
+                ai_recommendations = json.loads(response_text)
+            except json.JSONDecodeError as json_error:
+                logger.error(f"Failed to parse AI response as JSON: {json_error}")
+                logger.debug(f"AI Response text: {response_text[:500]}")
+                # Fallback if JSON parsing fails
+                raise RuntimeError(f"AI response parsing failed: {json_error}")
+            
+            # Validate and extract recommended tasks
+            if "recommended_tasks" not in ai_recommendations:
+                logger.warning("AI response missing 'recommended_tasks', using fallback")
+                raise RuntimeError("Invalid AI response format")
             
             # Convert AI recommendations to AdministrativeTask objects
             tasks = []
-            for i, task_data in enumerate(ai_recommendations["recommended_tasks"]):
-                task_id = f"{client.id}_{task_data['task_type']}_{datetime.now().strftime('%Y%m%d_%H%M')}"
-                
-                task = AdministrativeTask(
-                    task_id=task_id,
-                    task_type=TaskType(task_data["task_type"]),
-                    client=client,
-                    priority=TaskPriority(task_data["priority"]),
-                    description=task_data["description"],
-                    ai_analysis={
-                        "reasoning": task_data["reasoning"],
-                        "estimated_impact": task_data["estimated_impact"],
-                        "automation_potential": task_data["automation_potential"],
-                        "scheduling_preference": task_data["scheduling_preference"],
-                        "overall_assessment": ai_recommendations["overall_assessment"]
-                    }
-                )
-                tasks.append(task)
+            for i, task_data in enumerate(ai_recommendations.get("recommended_tasks", [])):
+                try:
+                    task_id = f"{client.id}_{task_data.get('task_type', 'unknown')}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                    
+                    task = AdministrativeTask(
+                        task_id=task_id,
+                        task_type=TaskType(task_data.get("task_type", "system_health_check")),
+                        client=client,
+                        priority=TaskPriority(task_data.get("priority", "medium")),
+                        description=task_data.get("description", "Administrative task"),
+                        ai_analysis={
+                            "reasoning": task_data.get("reasoning", "AI-recommended task"),
+                            "estimated_impact": task_data.get("estimated_impact", "medium"),
+                            "automation_potential": task_data.get("automation_potential", "medium"),
+                            "scheduling_preference": task_data.get("scheduling_preference", "immediate"),
+                            "overall_assessment": ai_recommendations.get("overall_assessment", {})
+                        }
+                    )
+                    tasks.append(task)
+                except (KeyError, ValueError) as task_error:
+                    logger.warning(f"Failed to create task from AI data: {task_error}, skipping")
+                    continue
+            
+            if not tasks:
+                logger.warning("No valid tasks generated from AI, using fallback")
+                raise RuntimeError("No valid tasks from AI response")
             
             return tasks
             
         except Exception as e:
-            logger.error(f"Error in AI task recommendation: {e}")
-            return self._fallback_task_generation(client)
+            logger.error(f"Error in AI task recommendation: {e}", exc_info=True)
+            # Don't raise - let the caller handle fallback
+            raise
 
     def _fallback_task_generation(self, client: Client) -> List[AdministrativeTask]:
         """Fallback task generation when AI is not available"""
@@ -267,22 +306,38 @@ class ITAdministrativeAgent:
             {
                 "task_type": TaskType.SYSTEM_HEALTH_CHECK,
                 "priority": TaskPriority.HIGH,
-                "description": "Perform comprehensive system health check for all critical systems"
+                "description": "Perform comprehensive system health check for all critical systems",
+                "reasoning": "Routine system health monitoring is essential for proactive issue detection",
+                "estimated_impact": "high",
+                "automation_potential": "high",
+                "scheduling_preference": "immediate"
             },
             {
                 "task_type": TaskType.SECURITY_AUDIT,
                 "priority": TaskPriority.MEDIUM,
-                "description": "Conduct security audit to identify vulnerabilities and compliance issues"
+                "description": "Conduct security audit to identify vulnerabilities and compliance issues",
+                "reasoning": "Regular security audits help maintain compliance and identify potential threats",
+                "estimated_impact": "high",
+                "automation_potential": "medium",
+                "scheduling_preference": "weekly"
             },
             {
                 "task_type": TaskType.BACKUP_VERIFICATION,
                 "priority": TaskPriority.HIGH,
-                "description": "Verify backup integrity and test recovery procedures"
+                "description": "Verify backup integrity and test recovery procedures",
+                "reasoning": "Backup verification ensures data recovery readiness in case of disaster",
+                "estimated_impact": "critical",
+                "automation_potential": "high",
+                "scheduling_preference": "weekly"
             },
             {
                 "task_type": TaskType.USER_ACCESS_REVIEW,
                 "priority": TaskPriority.MEDIUM,
-                "description": "Review user access rights and remove unnecessary privileges"
+                "description": "Review user access rights and remove unnecessary privileges",
+                "reasoning": "Regular access reviews maintain security posture and compliance",
+                "estimated_impact": "medium",
+                "automation_potential": "high",
+                "scheduling_preference": "monthly"
             }
         ]
         
@@ -297,10 +352,16 @@ class ITAdministrativeAgent:
                 priority=task_data["priority"],
                 description=task_data["description"],
                 ai_analysis={
-                    "reasoning": "Routine maintenance task",
-                    "estimated_impact": "medium",
-                    "automation_potential": "high",
-                    "scheduling_preference": "off_hours"
+                    "reasoning": task_data.get("reasoning", "Routine maintenance task"),
+                    "estimated_impact": task_data.get("estimated_impact", "medium"),
+                    "automation_potential": task_data.get("automation_potential", "high"),
+                    "scheduling_preference": task_data.get("scheduling_preference", "off_hours"),
+                    "overall_assessment": {
+                        "risk_level": "medium",
+                        "compliance_status": "compliant",
+                        "operational_health": "good",
+                        "recommendations_summary": "Standard administrative tasks for system maintenance"
+                    }
                 }
             )
             tasks.append(task)
@@ -347,6 +408,10 @@ class ITAdministrativeAgent:
         except Exception as e:
             task.status = TaskStatus.FAILED
             self.performance_metrics["failed_tasks"] += 1
+            self.performance_metrics["total_tasks_executed"] += 1
+            
+            # Store failed task in history too
+            self.task_history.append(task)
             
             return {
                 "task_id": task.task_id,
@@ -442,24 +507,13 @@ class ITAdministrativeAgent:
             
         except Exception as e:
             logger.error(f"Error in AI execution analysis: {e}")
-            results["ai_analysis"] = {
-                "execution_quality": "good",
-                "key_findings": ["Task completed successfully"],
-                "immediate_actions_required": [],
-                "follow_up_tasks": [],
-                "risk_assessment": "low",
-                "compliance_impact": "positive",
-                "performance_impact": "positive",
-                "ai_recommendations": ["Continue regular monitoring"],
-                "next_scheduled_run": None
-            }
-            return results
+            raise
 
     async def generate_compliance_report(self, client: Client) -> Dict:
         """Generate comprehensive compliance report using AI analysis"""
         
         if not self.llm_available:
-            return self._fallback_compliance_report(client)
+            raise RuntimeError("Gemini LLM not available for compliance report generation")
         
         try:
             # Get recent task history for compliance analysis
@@ -517,7 +571,7 @@ class ITAdministrativeAgent:
             
         except Exception as e:
             logger.error(f"Error in AI compliance report generation: {e}")
-            return self._fallback_compliance_report(client)
+            raise
 
     def _fallback_compliance_report(self, client: Client) -> Dict:
         """Fallback compliance report when AI is not available"""

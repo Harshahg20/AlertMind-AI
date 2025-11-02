@@ -6,6 +6,7 @@ import AgentControl from "../pages/AgentControl";
 import ClientCascadeView from "./ClientCascadeView";
 import EnhancedPatchManagement from "./EnhancedPatchManagement";
 import ITAdministrativeTasks from "./ITAdministrativeTasks";
+// import OpsCenter from "./OpsCenter"; // Temporarily disabled
 
 const TabContent = ({
   activeTab,
@@ -43,6 +44,8 @@ const TabContent = ({
       return <EnhancedPatchManagement clients={clients} loading={loading} />;
     case "admin":
       return <ITAdministrativeTasks clients={clients} loading={loading} />;
+    // case "ops":
+    //   return <OpsCenter clients={clients} loading={loading} />; // Temporarily disabled
     default:
       return null;
   }

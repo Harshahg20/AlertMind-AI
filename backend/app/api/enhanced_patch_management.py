@@ -55,7 +55,51 @@ async def generate_patch_plan(client_id: str, cve_list: List[Dict]) -> Dict:
         raise HTTPException(status_code=404, detail="Client not found")
     
     try:
-        patch_plan = await patch_agent.generate_patch_plan(client, cve_list)
+        # Normalize CVE data format
+        normalized_cve_list = []
+        for cve in cve_list:
+            normalized_cve = {
+                "cve": cve.get("cve_id") or cve.get("cve", "Unknown"),
+                "cve_id": cve.get("cve_id") or cve.get("cve", "Unknown"),
+                "severity": float(cve.get("severity", 0)),
+                "product": cve.get("product", "Unknown"),
+                "summary": cve.get("summary", "No description available")
+            }
+            normalized_cve_list.append(normalized_cve)
+        
+        patch_plan = await patch_agent.generate_patch_plan(client, normalized_cve_list)
+        
+        # Serialize maintenance windows properly
+        serialized_windows = []
+        for window in patch_plan.maintenance_windows:
+            # Extract CVE IDs from patches
+            cve_ids = []
+            patches = window.get("patches", [])
+            for patch in patches:
+                if hasattr(patch, "cve_id"):
+                    cve_ids.append(patch.cve_id)
+                elif isinstance(patch, dict):
+                    cve_ids.append(patch.get("cve_id", ""))
+                else:
+                    cve_ids.append(str(patch))
+            
+            scheduled_time = window.get("scheduled_time")
+            if isinstance(scheduled_time, datetime):
+                scheduled_time_str = scheduled_time.isoformat()
+            elif scheduled_time:
+                scheduled_time_str = str(scheduled_time)
+            else:
+                scheduled_time_str = datetime.now().isoformat()
+            
+            serialized_window = {
+                "window_id": window.get("window_id", ""),
+                "scheduled_time": scheduled_time_str,
+                "estimated_duration": window.get("estimated_duration", 0),
+                "risk_level": window.get("risk_level", "MEDIUM"),
+                "cve_ids": cve_ids if cve_ids else [analysis.cve_id for analysis in patch_plan.cve_analyses],
+                "rollback_plan": window.get("rollback_plan", {})
+            }
+            serialized_windows.append(serialized_window)
         
         return {
             "client_id": client_id,
@@ -75,7 +119,7 @@ async def generate_patch_plan(client_id: str, cve_list: List[Dict]) -> Dict:
                         "ai_analysis": analysis.ai_analysis
                     } for analysis in patch_plan.cve_analyses
                 ],
-                "maintenance_windows": patch_plan.maintenance_windows,
+                "maintenance_windows": serialized_windows,
                 "status": patch_plan.status.value,
                 "created_at": patch_plan.created_at.isoformat()
             },

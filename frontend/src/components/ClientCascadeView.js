@@ -22,49 +22,83 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
   const [loadingPredictions, setLoadingPredictions] = useState(false);
   const [activeView, setActiveView] = useState("overview"); // overview, detailed, enhanced
 
-  useEffect(() => {
-    if (clients && clients.length > 0) {
-      fetchAllClientPredictions();
-    }
-  }, [clients]);
-
-  const fetchAllClientPredictions = async () => {
+  // Use useCallback to memoize the fetch function
+  const fetchAllClientPredictions = React.useCallback(async () => {
+    if (!clients || clients.length === 0) return;
+    
     setLoadingPredictions(true);
     try {
+      // Fetch all predictions in parallel instead of sequentially
+      const predictionPromises = clients.map(async (client) => {
+        try {
+          // Only fetch basic predictions initially - enhanced can be lazy loaded
+          const basicPreds = await apiClient.getClientPredictions(client.id);
+          return {
+            clientId: client.id,
+            predictions: Array.isArray(basicPreds) ? basicPreds : [],
+            enhanced: null, // Will be loaded on demand
+          };
+        } catch (error) {
+          console.error(`Error fetching predictions for ${client.name}:`, error);
+          return {
+            clientId: client.id,
+            predictions: [],
+            enhanced: null,
+          };
+        }
+      });
+
+      // Wait for all parallel requests to complete
+      const results = await Promise.all(predictionPromises);
+
+      // Build the state objects
       const predictions = {};
       const enhanced = {};
-
-      // Fetch predictions for each client
-      for (const client of clients) {
-        try {
-          // Get basic predictions
-          const basicPreds = await apiClient.getClientPredictions(client.id);
-          predictions[client.id] = Array.isArray(basicPreds) ? basicPreds : [];
-
-          // Get enhanced predictions
-          const enhancedPred = await apiClient.simulateEnhancedAgent(client.id);
-          enhanced[client.id] = enhancedPred;
-        } catch (error) {
-          console.error(
-            `Error fetching predictions for ${client.name}:`,
-            error
-          );
-          predictions[client.id] = [];
-          enhanced[client.id] = null;
-        }
-      }
+      results.forEach((result) => {
+        predictions[result.clientId] = result.predictions;
+        enhanced[result.clientId] = result.enhanced;
+      });
 
       setClientPredictions(predictions);
       setEnhancedPredictions(enhanced);
     } catch (error) {
       console.error("Error fetching client predictions:", error);
-      // Set empty state on complete failure
       setClientPredictions({});
       setEnhancedPredictions({});
     } finally {
       setLoadingPredictions(false);
     }
-  };
+  }, [clients]);
+  
+  useEffect(() => {
+    if (clients && clients.length > 0) {
+      fetchAllClientPredictions();
+    }
+  }, [clients, fetchAllClientPredictions]);
+
+  // Lazy load enhanced predictions only when needed - use ref to prevent duplicate calls
+  const loadingEnhancedRef = React.useRef({});
+  const loadEnhancedPredictions = React.useCallback(async (clientId) => {
+    // If already loaded or loading, skip
+    if (enhancedPredictions[clientId] || loadingEnhancedRef.current[clientId]) {
+      return;
+    }
+
+    loadingEnhancedRef.current[clientId] = true;
+    setLoadingPredictions(true);
+    try {
+      const enhancedPred = await apiClient.simulateEnhancedAgent(clientId);
+      setEnhancedPredictions((prev) => ({
+        ...prev,
+        [clientId]: enhancedPred,
+      }));
+    } catch (error) {
+      console.error(`Error loading enhanced predictions for ${clientId}:`, error);
+    } finally {
+      loadingEnhancedRef.current[clientId] = false;
+      setLoadingPredictions(false);
+    }
+  }, [enhancedPredictions]);
 
   const getUrgencyColor = (urgency) => {
     switch (urgency?.toLowerCase()) {
@@ -421,11 +455,43 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
         </div>
       )}
 
-      {/* Enhanced AI View */}
+      {/* Enhanced AI View - Lazy load when tab is active */}
       {activeView === "enhanced" && (
-        <div className="space-y-6">
-          {filteredClients.map((client) => {
-            const enhanced = enhancedPredictions[client.id];
+        <EnhancedViewContent 
+          clients={filteredClients}
+          enhancedPredictions={enhancedPredictions}
+          loadingPredictions={loadingPredictions}
+          loadEnhancedPredictions={loadEnhancedPredictions}
+          getUrgencyColor={getUrgencyColor}
+          getConfidenceColor={getConfidenceColor}
+          formatTimeToCascade={formatTimeToCascade}
+        />
+      )}
+    </div>
+  );
+};
+
+// Separate component for enhanced view with proper useEffect
+const EnhancedViewContent = ({ clients, enhancedPredictions, loadingPredictions, loadEnhancedPredictions, getUrgencyColor, getConfidenceColor, formatTimeToCascade }) => {
+  const loadedRef = React.useRef(false);
+  
+  useEffect(() => {
+    // Load enhanced predictions for all clients when view becomes active (only once)
+    if (!loadedRef.current && clients.length > 0) {
+      loadedRef.current = true;
+      clients.forEach((client) => {
+        if (!enhancedPredictions[client.id] && !loadingPredictions) {
+          loadEnhancedPredictions(client.id);
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once when component mounts
+
+  return (
+    <div className="space-y-6">
+      {clients.map((client) => {
+        const enhanced = enhancedPredictions[client.id];
 
             return (
               <div
@@ -619,8 +685,6 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
             );
           })}
         </div>
-      )}
-    </div>
   );
 };
 

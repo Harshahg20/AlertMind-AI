@@ -1,10 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from pathlib import Path
 from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution, enhanced_agentic, enhanced_patch_management, it_administrative_tasks
+import os
+import google.generativeai as genai
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from files in priority order
+# 1) backend/.env (standard)
+# 2) backend/settings.env (fallback when dotfiles are restricted)
+# 3) project root .env
+backend_dir = Path(__file__).resolve().parents[1]
+load_dotenv(backend_dir / ".env")
+load_dotenv(backend_dir / "settings.env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 app = FastAPI(
     title="CascadeGuard AI API",
@@ -20,6 +29,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Verify Google AI configuration at startup
+@app.on_event("startup")
+async def verify_gemini_configuration():
+    api_key = os.getenv("GOOGLE_AI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key before starting the server.")
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        # Lightweight readiness probe
+        _ = await model.generate_content_async("healthcheck")
+    except Exception as e:
+        raise RuntimeError(f"Gemini readiness check failed: {e}")
 
 # Include API routes
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])

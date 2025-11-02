@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Shield,
   AlertTriangle,
@@ -8,6 +8,9 @@ import {
   Zap,
   Target,
   Brain,
+  CheckCircle2,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { apiClient } from "../utils/apiClient";
 import { EnhancedPatchSkeleton } from "./SkeletonLoader";
@@ -18,96 +21,227 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
   const [patchPlans, setPatchPlans] = useState({});
   const [cveAnalyses, setCveAnalyses] = useState({});
   const [maintenanceWindows, setMaintenanceWindows] = useState({});
-  const [executionMonitoring, setExecutionMonitoring] = useState({});
   const [loadingData, setLoadingData] = useState(false);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("cve-analysis");
   const [selectedCves, setSelectedCves] = useState([]);
+  const [analyzingCves, setAnalyzingCves] = useState(new Set());
 
+  // Safe clients array
+  const displayClients = clients && Array.isArray(clients) ? clients : [];
+
+  // Optimize loading - only fetch when component mounts and clients available
+  const fetchedRef = useRef(false);
+  
   useEffect(() => {
-    if (clients.length > 0) {
+    if (displayClients.length > 0 && !fetchedRef.current) {
+      fetchedRef.current = true;
       fetchCveDatabase();
     }
-  }, [clients]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayClients.length]);
 
-  const fetchCveDatabase = async () => {
+  const fetchCveDatabase = useCallback(async () => {
     try {
       setLoadingData(true);
-      const response = await apiClient.get("/api/enhanced-patch/cve-database");
-      setCveDatabase(response.data.cve_database || []);
-    } catch (error) {
-      console.error("Error fetching CVE database:", error);
+      setError(null);
+      // FastAPI returns data directly, not nested in .data
+      const response = await apiClient.get("/enhanced-patch/cve-database");
+      const data = response.cve_database || response.data?.cve_database || [];
+      setCveDatabase(data);
+      if (data.length === 0) {
+        setError("No CVEs found. Please check your connection or try refreshing.");
+      }
+    } catch (err) {
+      console.error("Error fetching CVE database:", err);
+      setError(err.message || "Failed to load CVE database. Please try again.");
+      setCveDatabase([]);
     } finally {
       setLoadingData(false);
     }
-  };
+  }, []);
 
-  const analyzeCveForClient = async (clientId, cveId) => {
+  const analyzeCveForClient = useCallback(async (clientId, cveId) => {
+    // Skip if already analyzed or currently analyzing
+    const key = `${clientId}_${cveId}`;
+    if (cveAnalyses[key] || analyzingCves.has(key)) {
+      return;
+    }
+    
     try {
-      setLoadingData(true);
+      setAnalyzingCves((prev) => new Set(prev).add(key));
+      setError(null);
       const response = await apiClient.get(
-        `/api/enhanced-patch/cve-analysis/${clientId}?cve_id=${cveId}`
+        `/enhanced-patch/cve-analysis/${clientId}?cve_id=${cveId}`
       );
-      setCveAnalyses((prev) => ({
-        ...prev,
-        [`${clientId}_${cveId}`]: response.data.cve_analysis,
-      }));
-    } catch (error) {
-      console.error("Error analyzing CVE:", error);
+      const analysis = response.cve_analysis || response.data?.cve_analysis;
+      if (analysis) {
+        setCveAnalyses((prev) => ({
+          ...prev,
+          [key]: analysis,
+        }));
+      }
+    } catch (err) {
+      console.error("Error analyzing CVE:", err);
+      setError(`Failed to analyze ${cveId}: ${err.message || "Unknown error"}`);
     } finally {
-      setLoadingData(false);
+      setAnalyzingCves((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
-  };
+  }, [cveAnalyses, analyzingCves]);
 
-  const generatePatchPlan = async (clientId, cveList) => {
+  const generatePatchPlan = useCallback(async (clientId, cveList) => {
+    if (!clientId || cveList.length === 0) return;
+    
     try {
       setLoadingData(true);
+      setError(null);
+      console.log("Generating patch plan for:", clientId, "with CVEs:", cveList);
       const response = await apiClient.post(
-        `/api/enhanced-patch/patch-plan/${clientId}`,
+        `/enhanced-patch/patch-plan/${clientId}`,
         cveList
       );
-      setPatchPlans((prev) => ({
-        ...prev,
-        [clientId]: response.data.patch_plan,
-      }));
-    } catch (error) {
-      console.error("Error generating patch plan:", error);
+      console.log("Patch plan response:", response);
+      const plan = response.patch_plan || response.data?.patch_plan;
+      if (plan) {
+        console.log("Setting patch plan:", plan);
+        setPatchPlans((prev) => ({
+          ...prev,
+          [clientId]: plan,
+        }));
+        setActiveTab("patch-plan"); // Switch to patch plan tab
+      } else {
+        console.error("No patch_plan in response:", response);
+        setError("Patch plan generation succeeded but returned no data. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error generating patch plan:", err);
+      setError(`Failed to generate patch plan: ${err.message || "Unknown error"}`);
     } finally {
       setLoadingData(false);
     }
-  };
+  }, []);
 
-  const optimizeMaintenanceWindows = async (clientId, patchPlan) => {
+  const generateSamplePatchPlan = useCallback(async () => {
+    if (displayClients.length === 0) return;
+    const clientId = selectedClient === "all" ? displayClients[0]?.id : selectedClient;
+    if (!clientId) return;
+
     try {
       setLoadingData(true);
-      const response = await apiClient.post(
-        `/api/enhanced-patch/optimize-maintenance/${clientId}`,
-        patchPlan
-      );
-      setMaintenanceWindows((prev) => ({
-        ...prev,
-        [clientId]: response.data.optimization,
+      setError(null);
+      
+      // Use first 3 CVEs from database as sample
+      const sampleCves = cveDatabase.slice(0, 3).map(cve => ({
+        cve_id: cve.cve || cve.cve_id,
+        severity: cve.severity,
+        product: cve.product,
+        summary: cve.summary
       }));
-    } catch (error) {
-      console.error("Error optimizing maintenance windows:", error);
+
+      if (sampleCves.length === 0) {
+        setError("No CVEs available. Please load the CVE database first.");
+        return;
+      }
+
+      console.log("Generating sample patch plan for:", clientId, "with CVEs:", sampleCves);
+      const response = await apiClient.post(
+        `/enhanced-patch/patch-plan/${clientId}`,
+        sampleCves
+      );
+      console.log("Sample patch plan response:", response);
+      const plan = response.patch_plan || response.data?.patch_plan;
+      if (plan) {
+        console.log("Setting sample patch plan:", plan);
+        setPatchPlans((prev) => ({
+          ...prev,
+          [clientId]: plan,
+        }));
+        setActiveTab("patch-plan"); // Switch to patch plan tab
+      } else {
+        console.error("No patch_plan in response:", response);
+        setError("Patch plan generation succeeded but returned no data. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error generating sample patch plan:", err);
+      setError(`Failed to generate sample patch plan: ${err.message || "Unknown error"}`);
     } finally {
       setLoadingData(false);
     }
-  };
+  }, [displayClients, selectedClient, cveDatabase]);
 
-  const monitorPatchExecution = async (clientId, windowId) => {
+  const optimizeMaintenanceWindows = useCallback(async (clientId, patchPlan) => {
     try {
+      setLoadingData(true);
+      setError(null);
       const response = await apiClient.post(
-        `/api/enhanced-patch/monitor-execution/${clientId}`,
-        { window_id: windowId }
+        `/enhanced-patch/optimize-maintenance/${clientId}`,
+        patchPlan
       );
-      setExecutionMonitoring((prev) => ({
-        ...prev,
-        [`${clientId}_${windowId}`]: response.data.monitoring_data,
-      }));
-    } catch (error) {
-      console.error("Error monitoring patch execution:", error);
+      const optimization = response.optimization || response.data?.optimization;
+      if (optimization) {
+        setMaintenanceWindows((prev) => ({
+          ...prev,
+          [clientId]: optimization,
+        }));
+        setActiveTab("maintenance");
+      }
+    } catch (err) {
+      console.error("Error optimizing maintenance windows:", err);
+      setError(`Failed to optimize maintenance windows: ${err.message || "Unknown error"}`);
+    } finally {
+      setLoadingData(false);
     }
-  };
+  }, []);
+
+  // Auto-populate maintenance windows when patch plan is generated
+  useEffect(() => {
+    if (Object.keys(patchPlans).length > 0) {
+      // Copy maintenance windows from patch plans to maintenance tab state
+      const newMaintenanceWindows = {};
+      Object.entries(patchPlans).forEach(([clientId, plan]) => {
+        if (plan.maintenance_windows && plan.maintenance_windows.length > 0) {
+          // Convert patch plan maintenance windows to optimization format
+          newMaintenanceWindows[clientId] = {
+            success_prediction: 0.85,
+            optimized_windows: plan.maintenance_windows.map((window, idx) => ({
+              window_id: window.window_id || `window_${idx + 1}`,
+              scheduled_time: window.scheduled_time,
+              estimated_duration: window.estimated_duration || 2,
+              risk_level: window.risk_level || "MEDIUM",
+              cve_ids: window.cve_ids || [],
+              patches: window.patches || [],
+              rollback_plan: window.rollback_plan || {},
+              optimization_reason: `Scheduled based on patch priority and risk assessment`,
+              recommended_actions: [
+                "Perform pre-patch backup",
+                "Verify system health before maintenance",
+                "Monitor during deployment"
+              ]
+            })),
+            overall_risk: plan.maintenance_windows.length > 0 
+              ? plan.maintenance_windows[0].risk_level || "MEDIUM" 
+              : "MEDIUM",
+            estimated_total_downtime: plan.maintenance_windows.reduce(
+              (sum, w) => sum + (w.estimated_duration || 0), 0
+            )
+          };
+        }
+      });
+      
+      // Only update if we have new maintenance windows and they're different
+      if (Object.keys(newMaintenanceWindows).length > 0) {
+        setMaintenanceWindows((prev) => ({
+          ...prev,
+          ...newMaintenanceWindows,
+        }));
+      }
+    }
+  }, [patchPlans]);
+
 
   const handleCveSelection = (cveId, selected) => {
     if (selected) {
@@ -118,11 +252,11 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
   };
 
   const handleGeneratePatchPlan = async () => {
-    const clientId = selectedClient === "all" ? clients[0]?.id : selectedClient;
+    const clientId = selectedClient === "all" ? displayClients[0]?.id : selectedClient;
     if (!clientId || selectedCves.length === 0) return;
 
     const selectedCveData = cveDatabase.filter((cve) =>
-      selectedCves.includes(cve.cve)
+      selectedCves.includes(cve.cve || cve.cve_id)
     );
     await generatePatchPlan(clientId, selectedCveData);
     setActiveTab("patch-plan");
@@ -150,14 +284,10 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
     }
   };
 
-  if (loading || loadingData) {
+  // Show skeleton only on initial load, not during data updates
+  if (loading && cveDatabase.length === 0) {
     return <EnhancedPatchSkeleton />;
   }
-
-  const filteredClients =
-    selectedClient === "all"
-      ? clients
-      : clients.filter((c) => c.id === selectedClient);
 
   return (
     <div className="space-y-6">
@@ -180,10 +310,11 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
           </div>
           <button
             onClick={fetchCveDatabase}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center"
+            disabled={loadingData}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors flex items-center"
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
+            <RefreshCw className={`w-4 h-4 mr-2 ${loadingData ? "animate-spin" : ""}`} />
+            {loadingData ? "Loading..." : "Refresh"}
           </button>
         </div>
       </div>
@@ -197,7 +328,7 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
             className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
           >
             <option value="all">All Clients</option>
-            {clients.map((client) => (
+            {displayClients.map((client) => (
               <option key={client.id} value={client.id}>
                 {client.name}
               </option>
@@ -228,6 +359,22 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
         </div>
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-900/20 border border-red-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-400" />
+            <span className="text-red-300">{error}</span>
+          </div>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-400 hover:text-red-300"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* CVE Analysis Tab */}
       {activeTab === "cve-analysis" && (
         <div className="space-y-6">
@@ -237,12 +384,32 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                 <AlertTriangle className="w-5 h-5 mr-2 text-red-400" />
                 CVE Database Analysis
               </h3>
-              <div className="text-sm text-gray-400">
-                {cveDatabase.length} CVEs available
+              <div className="flex items-center space-x-4">
+                {loadingData && (
+                  <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                )}
+                <div className="text-sm text-gray-400">
+                  {cveDatabase.length} CVEs available
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {cveDatabase.length === 0 && !loadingData ? (
+              <div className="text-center py-12">
+                <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                <p className="text-gray-400 mb-2">No CVEs found</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  {error || "Click refresh to load CVE database"}
+                </p>
+                <button
+                  onClick={fetchCveDatabase}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Load CVEs
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {cveDatabase.map((cve) => (
                 <div
                   key={cve.cve}
@@ -290,28 +457,52 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                       onClick={() =>
                         analyzeCveForClient(
                           selectedClient === "all"
-                            ? clients[0]?.id
+                            ? displayClients[0]?.id
                             : selectedClient,
                           cve.cve
                         )
                       }
-                      className="flex-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                      disabled={analyzingCves.has(`${selectedClient === "all" ? displayClients[0]?.id : selectedClient}_${cve.cve}`) || !displayClients.length}
+                      className="flex-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:opacity-50 text-white text-xs rounded transition-colors flex items-center justify-center"
                     >
-                      Analyze
+                      {analyzingCves.has(`${selectedClient === "all" ? displayClients[0]?.id : selectedClient}_${cve.cve}`) ? (
+                        <>
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          {cveAnalyses[`${selectedClient === "all" ? displayClients[0]?.id : selectedClient}_${cve.cve}`] && (
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                          )}
+                          {cveAnalyses[`${selectedClient === "all" ? displayClients[0]?.id : selectedClient}_${cve.cve}`] ? "Re-analyze" : "Analyze"}
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
 
             {selectedCves.length > 0 && (
               <div className="mt-6 flex justify-center">
                 <button
                   onClick={handleGeneratePatchPlan}
-                  className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center"
+                  disabled={loadingData || !displayClients.length}
+                  className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center"
                 >
-                  <Target className="w-5 h-5 mr-2" />
-                  Generate Patch Plan ({selectedCves.length} CVEs)
+                  {loadingData ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Target className="w-5 h-5 mr-2" />
+                      Generate Patch Plan ({selectedCves.length} CVEs)
+                    </>
+                  )}
                 </button>
               </div>
             )}
@@ -388,7 +579,42 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
       {/* Patch Plan Tab */}
       {activeTab === "patch-plan" && (
         <div className="space-y-6">
-          {Object.entries(patchPlans).map(([clientId, plan]) => (
+          {Object.keys(patchPlans).length === 0 ? (
+            <div className="bg-gray-800 border border-gray-700 rounded-lg p-12 text-center">
+              <Target className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+              <p className="text-gray-400 mb-2">No patch plans generated yet</p>
+              <p className="text-sm text-gray-500 mb-6">
+                Generate a sample patch plan automatically or select CVEs from the CVE Analysis tab
+              </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={generateSamplePatchPlan}
+                  disabled={loadingData || displayClients.length === 0 || cveDatabase.length === 0}
+                  className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center"
+                >
+                  {loadingData ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-5 h-5 mr-2" />
+                      Generate Sample Patch Plan
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab("cve-analysis")}
+                  className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors flex items-center"
+                >
+                  <Target className="w-5 h-5 mr-2" />
+                  Go to CVE Analysis
+                </button>
+              </div>
+            </div>
+          ) : (
+            Object.entries(patchPlans).map(([clientId, plan]) => (
             <div
               key={clientId}
               className="bg-gray-800 border border-gray-700 rounded-lg p-6"
@@ -408,29 +634,42 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                     CVE Analysis Summary
                   </h4>
                   <div className="space-y-3">
-                    {plan.cve_analyses.map((analysis, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-gray-700/50 border border-gray-600 rounded-lg p-3"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-mono text-sm text-blue-400">
-                            {analysis.cve_id}
-                          </span>
-                          <div
-                            className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(
-                              analysis.patch_priority
-                            )}`}
-                          >
-                            {analysis.patch_priority}
+                    {plan.cve_analyses && plan.cve_analyses.length > 0 ? (
+                      plan.cve_analyses.map((analysis, idx) => (
+                        <div
+                          key={idx}
+                          className="bg-gray-700/50 border border-gray-600 rounded-lg p-3"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-mono text-sm text-blue-400">
+                              {analysis.cve_id || `CVE-${idx + 1}`}
+                            </span>
+                            <div
+                              className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(
+                                analysis.patch_priority
+                              )}`}
+                            >
+                              {analysis.patch_priority || "LOW"}
+                            </div>
                           </div>
+                          <div className="text-sm text-gray-400">
+                            {analysis.product || "Unknown"} • Impact:{" "}
+                            {analysis.client_impact 
+                              ? `${(analysis.client_impact * 100).toFixed(1)}%`
+                              : "N/A"}
+                          </div>
+                          {analysis.estimated_effort && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Effort: {analysis.estimated_effort.hours || 0}h
+                            </div>
+                          )}
                         </div>
-                        <div className="text-sm text-gray-400">
-                          {analysis.product} • Impact:{" "}
-                          {(analysis.client_impact * 100).toFixed(1)}%
-                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center text-gray-400 py-4 text-sm">
+                        No CVE analyses available
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 
@@ -439,33 +678,48 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                     Maintenance Windows
                   </h4>
                   <div className="space-y-3">
-                    {plan.maintenance_windows.map((window, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-gray-700/50 border border-gray-600 rounded-lg p-3"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-white">
-                            {window.window_id}
-                          </span>
-                          <div
-                            className={`px-2 py-1 rounded text-xs font-medium ${
-                              window.risk_level === "CRITICAL"
-                                ? "text-red-400 bg-red-900/20"
-                                : window.risk_level === "HIGH"
-                                ? "text-orange-400 bg-orange-900/20"
-                                : "text-yellow-400 bg-yellow-900/20"
-                            }`}
-                          >
-                            {window.risk_level}
+                    {plan.maintenance_windows && plan.maintenance_windows.length > 0 ? (
+                      plan.maintenance_windows.map((window, idx) => (
+                        <div
+                          key={idx}
+                          className="bg-gray-700/50 border border-gray-600 rounded-lg p-3"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-white">
+                              {window.window_id || `Window ${idx + 1}`}
+                            </span>
+                            <div
+                              className={`px-2 py-1 rounded text-xs font-medium ${
+                                window.risk_level === "CRITICAL"
+                                  ? "text-red-400 bg-red-900/20"
+                                  : window.risk_level === "HIGH"
+                                  ? "text-orange-400 bg-orange-900/20"
+                                  : "text-yellow-400 bg-yellow-900/20"
+                              }`}
+                            >
+                              {window.risk_level || "MEDIUM"}
+                            </div>
                           </div>
+                          <div className="text-sm text-gray-400 mb-1">
+                            {window.scheduled_time ? (
+                              new Date(window.scheduled_time).toLocaleString()
+                            ) : (
+                              "Time TBD"
+                            )}{" "}
+                            • {window.estimated_duration || 0}h
+                          </div>
+                          {window.cve_ids && window.cve_ids.length > 0 && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              CVEs: {window.cve_ids.join(", ")}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-sm text-gray-400">
-                          {new Date(window.scheduled_time).toLocaleString()} •{" "}
-                          {window.estimated_duration}h
-                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center text-gray-400 py-4 text-sm">
+                        No maintenance windows scheduled yet
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>
@@ -473,22 +727,68 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
               <div className="mt-6 flex justify-center">
                 <button
                   onClick={() => optimizeMaintenanceWindows(clientId, plan)}
-                  className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors flex items-center"
+                  disabled={loadingData}
+                  className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center"
                 >
-                  <Zap className="w-5 h-5 mr-2" />
-                  Optimize Maintenance Windows
+                  {loadingData ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Optimizing...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-5 h-5 mr-2" />
+                      Optimize Maintenance Windows
+                    </>
+                  )}
                 </button>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
       {/* Maintenance Tab */}
       {activeTab === "maintenance" && (
         <div className="space-y-6">
-          {Object.entries(maintenanceWindows).map(
-            ([clientId, optimization]) => (
+          {Object.keys(maintenanceWindows).length === 0 ? (
+            <div className="bg-gray-800 border border-gray-700 rounded-lg p-12 text-center">
+              <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+              <p className="text-gray-400 mb-2">No optimized maintenance windows</p>
+              <p className="text-sm text-gray-500 mb-6">
+                Generate a patch plan first to see maintenance windows, or generate a sample one
+              </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={generateSamplePatchPlan}
+                  disabled={loadingData || displayClients.length === 0 || cveDatabase.length === 0}
+                  className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center"
+                >
+                  {loadingData ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-5 h-5 mr-2" />
+                      Generate Sample Patch Plan
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab("patch-plan")}
+                  className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors flex items-center"
+                >
+                  <Target className="w-5 h-5 mr-2" />
+                  Go to Patch Plan
+                </button>
+              </div>
+            </div>
+          ) : (
+            Object.entries(maintenanceWindows).map(
+              ([clientId, optimization]) => (
               <div
                 key={clientId}
                 className="bg-gray-800 border border-gray-700 rounded-lg p-6"
@@ -509,26 +809,49 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                       Optimized Schedule
                     </h4>
                     <div className="space-y-3">
-                      {optimization.optimized_windows.map((window, idx) => (
+                      {(optimization.optimized_windows || []).map((window, idx) => (
                         <div
                           key={idx}
                           className="bg-gray-700/50 border border-gray-600 rounded-lg p-4"
                         >
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-white">
-                              {window.window_id}
+                              {window.window_id || `Window ${idx + 1}`}
                             </span>
-                            <div className="text-sm text-green-400">
-                              {(window.success_probability * 100).toFixed(1)}%
-                              success
+                            <div className={`px-2 py-1 rounded text-xs font-medium ${
+                              window.risk_level === "CRITICAL" ? "text-red-400 bg-red-900/20" :
+                              window.risk_level === "HIGH" ? "text-orange-400 bg-orange-900/20" :
+                              "text-yellow-400 bg-yellow-900/20"
+                            }`}>
+                              {window.risk_level || "MEDIUM"}
                             </div>
                           </div>
                           <div className="text-sm text-gray-400 mb-2">
-                            {new Date(window.optimized_time).toLocaleString()}
+                            {window.scheduled_time || window.optimized_time ? (
+                              new Date(window.scheduled_time || window.optimized_time).toLocaleString()
+                            ) : (
+                              "Time TBD"
+                            )}
+                            {" • "}
+                            {window.estimated_duration || 0}h duration
                           </div>
+                          {window.cve_ids && window.cve_ids.length > 0 && (
+                            <div className="text-xs text-gray-500 mb-2">
+                              CVEs: {window.cve_ids.join(", ")}
+                            </div>
+                          )}
                           <div className="text-xs text-gray-500">
-                            {window.reasoning}
+                            {window.optimization_reason || window.reasoning || "Scheduled maintenance window"}
                           </div>
+                          {window.recommended_actions && window.recommended_actions.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {window.recommended_actions.map((action, actionIdx) => (
+                                <div key={actionIdx} className="text-xs text-gray-400">
+                                  • {action}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -541,21 +864,43 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                     <div className="space-y-3">
                       <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
                         <div className="text-sm text-gray-300 mb-2">
-                          Overall Risk: {optimization.overall_risk_assessment}
+                          Overall Risk: {optimization.overall_risk || optimization.overall_risk_assessment || "MEDIUM"}
                         </div>
-                        <div className="text-sm text-gray-300 mb-2">
-                          Approach: {optimization.recommended_approach}
-                        </div>
-                        <div className="text-sm text-gray-400">
+                        {optimization.recommended_approach && (
+                          <div className="text-sm text-gray-300 mb-2">
+                            Approach: {optimization.recommended_approach}
+                          </div>
+                        )}
+                        <div className="text-sm text-gray-400 mb-2">
                           Success Prediction:{" "}
-                          {(optimization.success_prediction * 100).toFixed(1)}%
+                          {((optimization.success_prediction || 0.85) * 100).toFixed(1)}%
                         </div>
+                        {optimization.estimated_total_downtime !== undefined && (
+                          <div className="text-sm text-gray-400">
+                            Estimated Total Downtime: {optimization.estimated_total_downtime}h
+                          </div>
+                        )}
                       </div>
+                      {optimization.optimized_windows && optimization.optimized_windows.length > 0 && (
+                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                          <h5 className="text-sm font-medium text-gray-300 mb-2">
+                            Maintenance Summary
+                          </h5>
+                          <div className="text-xs text-gray-400 space-y-1">
+                            <div>Total Windows: {optimization.optimized_windows.length}</div>
+                            <div>
+                              Total Patches: {optimization.optimized_windows.reduce(
+                                (sum, w) => sum + (w.cve_ids?.length || 0), 0
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
-            )
+            ))
           )}
         </div>
       )}

@@ -154,29 +154,27 @@ class EnhancedPatchManagementAgent:
         self.version = "2.0.0"
         self.created_at = datetime.now()
         
-        # Initialize Gemini LLM
-        self.api_key = api_key or "demo_key"
-        if self.api_key != "demo_key":
-            try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel(
-                    'gemini-1.5-pro',
-                    safety_settings={
-                        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                    }
-                )
-                self.llm_available = True
-                logger.info("✅ Gemini 1.5 Pro loaded for enhanced patch management")
-            except Exception as e:
-                logger.error(f"❌ Failed to load Gemini: {e}")
-                self.llm_available = False
-        else:
-            self.model = None
-            self.llm_available = False
-            logger.warning("Using mock AI responses - set GOOGLE_AI_API_KEY for real analysis")
+        # Initialize Gemini LLM (required)
+        import os
+        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key.")
+        try:
+            genai.configure(api_key=self.api_key)
+            self.model = genai.GenerativeModel(
+                'gemini-2.5-flash',
+                safety_settings={
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                }
+            )
+            self.llm_available = True
+            logger.info("✅ Gemini 1.5 Pro loaded for enhanced patch management")
+        except Exception as e:
+            logger.error(f"❌ Failed to load Gemini: {e}")
+            raise
         
         # Agent memory for learning
         self.patch_history = []
@@ -194,8 +192,7 @@ class EnhancedPatchManagementAgent:
         """Analyze CVE using AI to determine client-specific impact and recommendations"""
         
         if not self.llm_available:
-            # Fallback to deterministic analysis
-            return self._fallback_cve_analysis(cve_data, client)
+            raise RuntimeError("Gemini LLM not available for CVE analysis")
         
         try:
             # Prepare context for AI analysis
@@ -242,37 +239,76 @@ class EnhancedPatchManagementAgent:
             """
             
             response = await self.model.generate_content_async(prompt)
-            ai_analysis = json.loads(response.text)
+            response_text = response.text.strip()
+            
+            # Try to extract JSON from markdown code blocks if present
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+            
+            # Try to parse JSON
+            try:
+                ai_analysis = json.loads(response_text)
+            except json.JSONDecodeError as json_error:
+                logger.warning(f"Failed to parse AI response as JSON: {json_error}. Response: {response_text[:200]}")
+                # Use fallback analysis if JSON parsing fails
+                logger.info(f"Using fallback CVE analysis for {context['cve_id']}")
+                return self._fallback_cve_analysis(cve_data, client)
+            
+            # Validate required fields
+            if not isinstance(ai_analysis, dict):
+                logger.warning(f"AI response is not a dictionary, using fallback")
+                return self._fallback_cve_analysis(cve_data, client)
             
             # Calculate client impact score
             client_impact = ai_analysis.get("client_impact_score", 0.5)
+            if not isinstance(client_impact, (int, float)):
+                client_impact = 0.5
             
-            return CVEAnalysis(
+            # Ensure patch_priority is set correctly
+            patch_urgency = ai_analysis.get("patch_urgency", "medium")
+            patch_priority_map = {
+                "immediate": "IMMEDIATE",
+                "high": "HIGH",
+                "medium": "MEDIUM",
+                "low": "LOW"
+            }
+            patch_priority = patch_priority_map.get(patch_urgency.lower(), "MEDIUM")
+            
+            analysis = CVEAnalysis(
                 cve_id=context['cve_id'],
                 severity=context['severity'],
                 product=context['product'],
                 summary=context['summary'],
-                client_impact=client_impact,
+                client_impact=float(client_impact),
                 ai_analysis=ai_analysis
             )
             
+            # Override patch_priority from AI analysis
+            analysis.patch_priority = patch_priority
+            
+            return analysis
+            
         except Exception as e:
-            logger.error(f"Error in AI CVE analysis: {e}")
+            logger.error(f"Error in AI CVE analysis: {e}", exc_info=True)
+            # Use fallback instead of raising
+            logger.info(f"Falling back to deterministic analysis for {cve_data.get('cve', 'Unknown')}")
             return self._fallback_cve_analysis(cve_data, client)
 
     def _fallback_cve_analysis(self, cve_data: Dict, client: Client) -> CVEAnalysis:
         """Fallback deterministic CVE analysis when AI is not available"""
-        cve_id = cve_data.get("cve", "Unknown")
-        severity = cve_data.get("severity", 0)
+        cve_id = cve_data.get("cve_id") or cve_data.get("cve", "Unknown")
+        severity = float(cve_data.get("severity", 0))
         product = cve_data.get("product", "Unknown")
         summary = cve_data.get("summary", "No description available")
         
         # Simple impact calculation
-        is_critical_system = product in client.critical_systems
+        is_critical_system = product in client.critical_systems if hasattr(client, 'critical_systems') else False
         client_impact = min(1.0, severity / 10.0 * (1.5 if is_critical_system else 1.0))
         
         ai_analysis = {
-            "client_impact_score": client_impact,
+            "client_impact_score": float(client_impact),
             "business_impact": "critical" if client_impact > 0.8 else "high" if client_impact > 0.6 else "medium" if client_impact > 0.4 else "low",
             "exploitability": "high" if severity > 8.0 else "medium" if severity > 6.0 else "low",
             "patch_urgency": "immediate" if severity > 9.0 else "high" if severity > 7.0 else "medium" if severity > 5.0 else "low",
@@ -286,14 +322,16 @@ class EnhancedPatchManagementAgent:
             "risk_mitigation": ["Backup before patching", "Test in staging environment"]
         }
         
-        return CVEAnalysis(
-            cve_id=cve_id,
-            severity=severity,
-            product=product,
-            summary=summary,
-            client_impact=client_impact,
+        analysis = CVEAnalysis(
+            cve_id=str(cve_id),
+            severity=float(severity),
+            product=str(product),
+            summary=str(summary),
+            client_impact=float(client_impact),
             ai_analysis=ai_analysis
         )
+        
+        return analysis
 
     async def generate_patch_plan(self, client: Client, cve_list: List[Dict]) -> PatchPlan:
         """Generate comprehensive patch plan using AI analysis"""
@@ -319,7 +357,7 @@ class EnhancedPatchManagementAgent:
         """Use AI to optimize maintenance windows based on client patterns"""
         
         if not self.llm_available:
-            return self._fallback_optimization(patch_plan)
+            raise RuntimeError("Gemini LLM not available for maintenance optimization")
         
         try:
             context = {
@@ -368,7 +406,7 @@ class EnhancedPatchManagementAgent:
             
         except Exception as e:
             logger.error(f"Error in maintenance window optimization: {e}")
-            return self._fallback_optimization(patch_plan)
+            raise
 
     def _fallback_optimization(self, patch_plan: PatchPlan) -> Dict:
         """Fallback optimization when AI is not available"""
@@ -421,7 +459,7 @@ class EnhancedPatchManagementAgent:
             "rollback_triggered": False
         }
         
-        # Use AI to analyze monitoring data if available
+        # Use AI to analyze monitoring data
         if self.llm_available:
             try:
                 prompt = f"""
@@ -446,6 +484,7 @@ class EnhancedPatchManagementAgent:
                 
             except Exception as e:
                 logger.error(f"Error in patch execution monitoring: {e}")
+                raise
         
         return monitoring_data
 

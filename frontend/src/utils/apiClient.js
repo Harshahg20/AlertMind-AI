@@ -33,6 +33,31 @@ class ApiClient {
     }
   }
 
+  // Convenience methods for common HTTP verbs
+  async get(endpoint, options = {}) {
+    return this.request(endpoint, { ...options, method: "GET" });
+  }
+
+  async post(endpoint, body, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: "POST",
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+  }
+
+  async put(endpoint, body, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: "PUT",
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+  }
+
+  async delete(endpoint, options = {}) {
+    return this.request(endpoint, { ...options, method: "DELETE" });
+  }
+
   // Alert endpoints
   async getAllAlerts() {
     return this.request("/alerts");

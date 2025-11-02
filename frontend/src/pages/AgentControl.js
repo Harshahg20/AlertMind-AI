@@ -1,118 +1,155 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "../utils/apiClient";
-import { AgentControlSkeleton } from "../components/SkeletonLoader";
 
 const AgentControl = () => {
-  const [agentStatus, setAgentStatus] = useState(null);
-  const [agentMetrics, setAgentMetrics] = useState(null);
-  const [agentInsights, setAgentInsights] = useState(null);
+  // Initialize with optimistic defaults for instant UI render
+  const [agentStatus, setAgentStatus] = useState({
+    agent_running: false,
+    agent_metrics: {
+      total_actions_taken: 0,
+      success_rate: 0,
+      learning_cycles: 0,
+      agent_state: "stopped",
+      confidence_threshold: 0.7,
+      risk_tolerance: 0.6,
+      active_clients: 0,
+      patterns_learned: 0,
+      recent_decisions: 0,
+    },
+  });
+  const [agentMetrics, setAgentMetrics] = useState(agentStatus?.agent_metrics || {});
+  const [agentInsights, setAgentInsights] = useState({
+    agent_personality: {
+      risk_tolerance: "moderate",
+      learning_speed: "normal",
+      confidence_level: "medium",
+    },
+    performance_analysis: {
+      success_rate: "0%",
+      efficiency: "unknown",
+      reliability: "unknown",
+    },
+    recommendations: [],
+  });
   const [agentPredictions, setAgentPredictions] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState("unknown");
+  const [connectionStatus, setConnectionStatus] = useState("connecting");
   const [selectedRecommendation, setSelectedRecommendation] = useState(null);
   const [showRecommendationModal, setShowRecommendationModal] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
 
-  useEffect(() => {
-    fetchAgentData();
-    const interval = setInterval(fetchAgentData, 10000); // Update every 10 seconds
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchAgentData = async () => {
+  // Add loading state to prevent concurrent requests
+  const isFetchingRef = React.useRef(false);
+  const insightsRefreshCounter = React.useRef(0);
+  const lastFetchTimeRef = React.useRef(0);
+  
+  // Ultra-optimized fetch - minimal blocking, maximum async
+  const fetchAgentData = React.useCallback(async () => {
+    // Prevent concurrent requests
+    if (isFetchingRef.current) {
+      return;
+    }
+    
+    // Throttle: Don't fetch if last fetch was less than 5 seconds ago
+    const now = Date.now();
+    if (now - lastFetchTimeRef.current < 5000) {
+      return;
+    }
+    
+    isFetchingRef.current = true;
+    lastFetchTimeRef.current = now;
+    
+    // Set default optimistic state immediately for fast UI
+    setConnectionStatus("connecting");
+    
+    // CRITICAL: Only fetch status immediately, everything else is deferred
     try {
-      const [status, insights, predictions, simulation, training] =
-        await Promise.allSettled([
-          apiClient.getAgentStatus(),
-          apiClient.getAgentInsights(),
-          apiClient.getAgentPredictions(),
-          apiClient.simulateCascade({
-            client_id: "client_001",
-            type: "database_cascade",
-          }),
-          apiClient.getTrainingStatus(),
-        ]);
-
-      // Handle Promise.allSettled results
-      const statusResult = status.status === "fulfilled" ? status.value : null;
-      const insightsResult =
-        insights.status === "fulfilled" ? insights.value : null;
-      const predictionsResult =
-        predictions.status === "fulfilled" ? predictions.value : null;
-      const simulationResult =
-        simulation.status === "fulfilled" ? simulation.value : null;
-      const trainingResult =
-        training.status === "fulfilled" ? training.value : null;
-
-      setAgentStatus(statusResult);
-      setAgentMetrics(statusResult?.agent_metrics);
-      setAgentInsights(statusResult?.agent_insights);
-      setTrainingStatus(trainingResult);
-
-      // Use simulation data for active predictions instead of history
-      if (simulationResult && simulationResult.prediction) {
-        const activePrediction = {
-          client_id: simulationResult.client.id,
-          client_name: simulationResult.client.name,
-          confidence: simulationResult.prediction.confidence,
-          predicted_in: simulationResult.prediction.predicted_in,
-          time_to_cascade_minutes: simulationResult.prediction.predicted_in,
-          predicted_cascade_systems:
-            simulationResult.prediction.affected_systems,
-          urgency_level: simulationResult.prediction.urgency_level,
-          ai_analysis: {
-            root_cause_analysis: simulationResult.prediction.summary,
-          },
-          recommended_actions: simulationResult.prediction.prevention_actions,
-          timestamp: simulationResult.generated_at,
-        };
-        setAgentPredictions([activePrediction]);
+      const statusResult = await Promise.race([
+        apiClient.getAgentStatus(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000)) // 5s timeout
+      ]).catch(() => null);
+      
+      if (statusResult) {
+        setAgentStatus(statusResult);
+        setAgentMetrics(statusResult?.agent_metrics || {});
+        setConnectionStatus("connected");
+        // Use insights from status if available (no extra API call)
+        if (statusResult?.agent_insights) {
+          setAgentInsights(statusResult.agent_insights);
+        }
       } else {
-        setAgentPredictions(predictionsResult?.predictions || []);
+        setConnectionStatus("disconnected");
       }
-
-      setConnectionStatus("connected");
     } catch (error) {
-      console.error("Error fetching agent data:", error);
-      // Set default state if API calls fail - start with agent stopped
-      setAgentStatus({
-        agent_running: false,
-        agent_metrics: {
-          total_actions_taken: 0,
-          success_rate: 0,
-          learning_cycles: 0,
-          agent_state: "stopped",
-          confidence_threshold: 0.7,
-          risk_tolerance: 0.6,
-          active_clients: 0,
-          patterns_learned: 0,
-          recent_decisions: 0,
-        },
-        agent_insights: {
-          agent_personality: {
-            risk_tolerance: "moderate",
-            learning_speed: "normal",
-            confidence_level: "medium",
-          },
-          performance_analysis: {
-            success_rate: "0%",
-            efficiency: "unknown",
-            reliability: "unknown",
-          },
-          recommendations: [],
-        },
-      });
+      console.error("Error fetching agent status:", error);
       setConnectionStatus("disconnected");
     } finally {
-      setLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+    
+    // DEFER ALL HEAVY OPERATIONS - don't block UI
+    // Run these completely async with no waiting
+    setTimeout(() => {
+      // Heavy: Fetch predictions (with timeout)
+      Promise.race([
+        apiClient.getAgentPredictions(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000))
+      ])
+        .then((result) => {
+          if (result?.predictions) {
+            setAgentPredictions(result.predictions || []);
+          }
+        })
+        .catch(() => {
+          // Silently fail - not critical
+        });
+      
+      // Heavy: Fetch training status (with timeout)
+      Promise.race([
+        apiClient.getTrainingStatus(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000))
+      ])
+        .then((result) => {
+          if (result) setTrainingStatus(result);
+        })
+        .catch(() => {
+          // Silently fail - not critical
+        });
+      
+      // Expensive: Fetch insights VERY rarely (every 5th call, ~4 minutes)
+      insightsRefreshCounter.current += 1;
+      if (insightsRefreshCounter.current % 5 === 0) {
+        Promise.race([
+          apiClient.getAgentInsights(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
+        ])
+          .then((insights) => {
+            if (insights) setAgentInsights(insights);
+          })
+          .catch(() => {
+            // Silently fail - not critical
+          });
+      }
+    }, 100); // Small delay to let UI render first
+  }, []);
+  
+  useEffect(() => {
+    // Initial fast fetch (status only)
+    fetchAgentData();
+    
+    // Much longer interval - only refresh every 60 seconds (was 30)
+    const interval = setInterval(() => {
+      fetchAgentData();
+    }, 60000); // Update every 60 seconds
+    
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   const handleStartAgent = async () => {
     setActionLoading(true);
     try {
-      const response = await apiClient.startAgent();
+      await apiClient.startAgent();
 
       // Update local state immediately
       setAgentStatus((prev) => ({
@@ -137,7 +174,7 @@ const AgentControl = () => {
   const handleStopAgent = async () => {
     setActionLoading(true);
     try {
-      const response = await apiClient.stopAgent();
+      await apiClient.stopAgent();
 
       // Update local state immediately
       setAgentStatus((prev) => ({
@@ -330,9 +367,7 @@ const AgentControl = () => {
     }
   };
 
-  if (loading) {
-    return <AgentControlSkeleton />;
-  }
+  // No blocking skeleton - UI renders immediately with optimistic defaults
 
   return (
     <div className="space-y-6">
@@ -935,7 +970,9 @@ const AgentControl = () => {
                     </span>
                     <span className="text-sm text-gray-400">•</span>
                     <span className="text-sm text-gray-300">
-                      {prediction.predicted_cascade_systems?.join(", ")}
+                      {Array.isArray(prediction.predicted_cascade_systems) 
+                        ? prediction.predicted_cascade_systems.join(", ")
+                        : prediction.predicted_cascade_systems || "Multiple systems"}
                     </span>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -956,7 +993,9 @@ const AgentControl = () => {
                   </div>
                 </div>
                 <div className="text-sm text-gray-300">
-                  {prediction.ai_analysis?.root_cause_analysis}
+                  {prediction.ai_analysis?.root_cause_analysis || 
+                   prediction.summary || 
+                   "Potential cascade failure detected based on current alert patterns"}
                 </div>
                 {prediction.recommended_actions &&
                   prediction.recommended_actions.length > 0 && (

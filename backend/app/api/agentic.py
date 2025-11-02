@@ -284,32 +284,141 @@ async def update_agent_learning(incident_data: Dict = None):
         logger.error(f"Learning endpoint failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+def _format_root_causes(root_causes):
+    """Format root causes as string for frontend display"""
+    if isinstance(root_causes, str):
+        return root_causes
+    elif isinstance(root_causes, list):
+        if len(root_causes) == 0:
+            return "Potential cascade detected based on current alerts"
+        return ". ".join(str(cause) for cause in root_causes if cause)
+    else:
+        return str(root_causes) if root_causes else "Potential cascade detected based on current alerts"
+
 @router.get("/agent/predictions/history")
 async def get_prediction_history(limit: int = 20):
-    """Get history of agent predictions for analysis"""
+    """Get active cascade predictions for all clients"""
     try:
-        recent_predictions = get_cascade_agent().incident_memory[-limit:] if get_cascade_agent().incident_memory else []
+        # Get current alerts
+        all_alerts = generate_mock_alerts()
         
-        # Format for frontend consumption
+        # Filter high-risk alerts that could lead to cascades
+        high_risk_alerts = [
+            a for a in all_alerts 
+            if a.cascade_risk > 0.5 and a.severity in ["warning", "critical"]
+        ]
+        
+        if not high_risk_alerts:
+            return {
+                "predictions": [],
+                "total_count": 0,
+                "retrieved_count": 0
+            }
+        
+        # Group alerts by client
+        client_alerts_map = {}
+        for alert in high_risk_alerts:
+            if alert.client_id not in client_alerts_map:
+                client_alerts_map[alert.client_id] = []
+            client_alerts_map[alert.client_id].append(alert)
+        
+        # Generate predictions for each client with high-risk alerts
+        # Limit to top clients to avoid timeout
+        agent = get_cascade_agent()
         formatted_predictions = []
-        for pred in recent_predictions:
-            formatted_predictions.append({
-                "timestamp": pred.get("timestamp"),
-                "client_id": pred.get("client_id"),
-                "confidence": pred.get("confidence", 0.0),
-                "urgency": pred.get("urgency", "medium"),
-                "alerts_count": len(pred.get("alerts", [])),
-                "prediction_summary": pred.get("prediction", {}).get("summary", "No summary available")
-            })
+        
+        # Process up to 5 clients at a time to avoid timeout
+        clients_to_process = list(client_alerts_map.items())[:min(limit, 5)]
+        
+        for client_id, client_alerts in clients_to_process:
+            try:
+                # Find client
+                client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+                if not client:
+                    continue
+                
+                # Prepare correlated data for agent
+                alert_dicts = []
+                for alert in client_alerts:
+                    alert_dict = {
+                        'id': alert.id,
+                        'client_id': alert.client_id,
+                        'client_name': alert.client_name,
+                        'system': alert.system,
+                        'severity': alert.severity,
+                        'message': alert.message,
+                        'category': alert.category,
+                        'timestamp': alert.timestamp.isoformat(),
+                        'cascade_risk': alert.cascade_risk,
+                        'is_correlated': alert.is_correlated
+                    }
+                    alert_dicts.append(alert_dict)
+                
+                correlated_data = {
+                    'alerts': alert_dicts,
+                    'client': client,
+                    'historical_data': HISTORICAL_INCIDENTS
+                }
+                
+                # Run agent prediction
+                agent_result = await agent.run(correlated_data)
+                
+                # Extract predicted systems from alerts
+                predicted_systems = list(set([alert.system for alert in client_alerts]))
+                
+                # Format for frontend
+                formatted_predictions.append({
+                    "client_id": client_id,
+                    "client_name": client.name,
+                    "confidence": agent_result.get("prediction_confidence", agent_result.get("confidence", 0.0)),
+                    "prediction_confidence": agent_result.get("prediction_confidence", agent_result.get("confidence", 0.0)),
+                    "time_to_cascade_minutes": agent_result.get("time_to_cascade_minutes", agent_result.get("predicted_in", 0)),
+                    "predicted_in": agent_result.get("predicted_in", agent_result.get("time_to_cascade_minutes", 0)),
+                    "predicted_cascade_systems": predicted_systems,
+                    "ai_analysis": {
+                        "root_cause_analysis": _format_root_causes(
+                            agent_result.get("ai_analysis", {}).get("root_cause_analysis") or 
+                            agent_result.get("root_causes", []) or
+                            agent_result.get("summary", "Potential cascade detected based on current alerts")
+                        ),
+                        "reasoning": (
+                            agent_result.get("ai_analysis", {}).get("reasoning", "") or 
+                            agent_result.get("summary", "") or
+                            "AI analysis based on current alert patterns and system dependencies"
+                        )
+                    },
+                    "recommended_actions": agent_result.get("recommended_actions", []) or 
+                                         agent_result.get("prevention_actions", []) or [],
+                    "timestamp": datetime.now().isoformat(),
+                    "alerts_count": len(client_alerts),
+                    "urgency": "high" if agent_result.get("prediction_confidence", 0) > 0.7 else "medium"
+                })
+                
+            except Exception as e:
+                logger.warning(f"Failed to generate prediction for {client_id}: {e}")
+                continue
+        
+        # Sort by confidence and urgency
+        formatted_predictions.sort(
+            key=lambda x: (x.get("prediction_confidence", 0), -x.get("time_to_cascade_minutes", 0)), 
+            reverse=True
+        )
         
         return {
-            "predictions": formatted_predictions,
-            "total_count": len(get_cascade_agent().incident_memory),
-            "retrieved_count": len(formatted_predictions)
+            "predictions": formatted_predictions[:limit],
+            "total_count": len(formatted_predictions),
+            "retrieved_count": len(formatted_predictions[:limit])
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to get prediction history: {e}", exc_info=True)
+        # Return empty rather than fail completely
+        return {
+            "predictions": [],
+            "total_count": 0,
+            "retrieved_count": 0,
+            "error": str(e)
+        }
 
 @router.post("/agent/simulate")
 async def simulate_agent_prediction():

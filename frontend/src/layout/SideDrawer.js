@@ -51,6 +51,12 @@ const navItems = [
     label: "IT Admin Tasks",
     icon: <Settings className="w-5 h-5" />,
   },
+  // Ops Center temporarily disabled
+  // {
+  //   id: "ops",
+  //   label: "Ops Center",
+  //   icon: <Settings className="w-5 h-5" />,
+  // },
 ];
 
 const SideDrawer = ({ drawerOpen, activeTab, onChangeTab }) => {

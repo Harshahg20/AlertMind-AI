@@ -5,7 +5,8 @@ import traceback
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 import httpx
-from langchain_google_genai import ChatGoogleGenerativeAI
+import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 from app.models.alert import Alert, Client, CascadePrediction
 from app.services.cascade_prediction import CascadePredictionEngine
 
@@ -61,16 +62,26 @@ class CascadePredictionAgent(Agent):
         super().__init__("cascade_prediction_agent")
         
         # Initialize LLM (Gemini 1.5 Pro for reasoning)
-        self.api_key = api_key or "demo_key"
-        if self.api_key != "demo_key":
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash", 
-                temperature=0.2,
-                google_api_key=self.api_key
-            )
-        else:
-            self.llm = None
-            logger.warning("Using mock LLM responses - set GOOGLE_AI_API_KEY for real predictions")
+        import os
+        from dotenv import load_dotenv
+        from pathlib import Path
+        
+        # Load environment variables from .env file
+        backend_dir = Path(__file__).resolve().parents[2]
+        load_dotenv(backend_dir / ".env")
+        load_dotenv(backend_dir / "settings.env")
+        
+        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
+        print("=" * 60)
+        print("GOOGLE_AI_API_KEY:", self.api_key)
+        if self.api_key:
+            print(f"API Key length: {len(self.api_key)} characters")
+            print(f"API Key preview: {self.api_key[:10]}...{self.api_key[-4:]}")
+        print("=" * 60)
+        if not self.api_key:
+            raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key.")
+        genai.configure(api_key=self.api_key)
+        self.llm = genai.GenerativeModel('gemini-2.5-flash')
         
         # Initialize numeric prediction engine
         self.prediction_engine = CascadePredictionEngine()
@@ -104,11 +115,8 @@ class CascadePredictionAgent(Agent):
             # Step 2: Prepare context for LLM reasoning
             analysis_context = self._prepare_llm_context(alerts, client, historical_data, engine_output)
             
-            # Step 3: Get LLM reasoning and insights
-            if self.llm:
-                llm_reasoning = await self._get_llm_reasoning(analysis_context)
-            else:
-                llm_reasoning = self._get_mock_llm_reasoning(analysis_context)
+            # Step 3: Get LLM reasoning and insights (no mock fallback)
+            llm_reasoning = await self._get_llm_reasoning(analysis_context)
             
             # Step 4: Combine numeric prediction with LLM insights
             enhanced_prediction = self._combine_predictions(engine_output, llm_reasoning, alerts, client)
@@ -280,78 +288,61 @@ Focus on temporal patterns, system dependencies, and prevention effectiveness.
         
         return context
     
-    async def _get_llm_reasoning(self, context: str) -> Dict[str, Any]:
-        """Get LLM reasoning and insights"""
-        # Check if LLM is available
-        if not self.llm:
-            logger.info("LLM not available, using mock reasoning")
-            return self._get_mock_llm_reasoning(context)
-        
-        try:
-            response = await self.llm.ainvoke(context)
-            response_text = response.content.strip()
-            
-            # Parse JSON response
-            if response_text.startswith('```json'):
-                response_text = response_text[7:-3]
-            elif response_text.startswith('```'):
-                response_text = response_text[3:-3]
-            
-            # Try to parse as JSON
+    async def _get_llm_reasoning(self, context: str, max_retries: int = 3) -> Dict[str, Any]:
+        """Get LLM reasoning and insights with retry logic for quota errors"""
+        for attempt in range(max_retries):
             try:
-                return json.loads(response_text)
-            except json.JSONDecodeError:
-                # If not valid JSON, extract key information
-                return self._parse_text_response(response_text)
+                response = await self.llm.generate_content_async(context)
+                response_text = response.text.strip()
                 
-        except Exception as e:
-            logger.error(f"LLM reasoning failed: {e}")
-            return self._get_mock_llm_reasoning(context)
-    
-    def _get_mock_llm_reasoning(self, context: str) -> Dict[str, Any]:
-        """Generate mock LLM reasoning for demo purposes"""
-        
-        # Extract key metrics from context
-        alert_count = context.count('"severity"')
-        critical_count = context.count('"critical"')
-        warning_count = context.count('"warning"')
-        
-        # Simulate intelligent analysis
-        if critical_count > 0:
-            predicted_in = 8 + (critical_count * 3)
-            confidence = min(0.95, 0.7 + (critical_count * 0.1))
-            urgency = "critical"
-        elif warning_count > 2:
-            predicted_in = 15 + (warning_count * 2)
-            confidence = min(0.85, 0.6 + (warning_count * 0.05))
-            urgency = "high"
-        else:
-            predicted_in = 25
-            confidence = 0.4
-            urgency = "medium"
-        
-        return {
-            "predicted_in": predicted_in,
-            "confidence": round(confidence, 2),
-            "root_causes": [
-                "Resource exhaustion detected in critical systems",
-                "Temporal correlation between alerts indicates cascade pattern",
-                "System dependencies show high failure propagation risk"
-            ],
-            "summary": f"LLM analysis indicates {urgency} cascade risk with {confidence*100:.0f}% confidence. Predicted cascade within {predicted_in} minutes based on current alert patterns and system dependencies. Immediate prevention actions recommended.",
-            "reasoning": {
-                "temporal_analysis": f"Detected {alert_count} alerts with temporal clustering pattern",
-                "dependency_analysis": "Critical system dependencies show high cascade risk",
-                "resource_analysis": "CPU, memory, and I/O patterns indicate resource exhaustion",
-                "prevention_effectiveness": "Historical data shows 85% success rate for immediate actions"
-            },
-            "urgency_level": urgency,
-            "recommended_immediate_actions": [
-                "Scale critical system resources immediately",
-                "Activate failover mechanisms for dependent systems",
-                "Clear resource bottlenecks (connections, cache, etc.)"
-            ]
-        }
+                # Parse JSON response
+                if response_text.startswith('```json'):
+                    response_text = response_text[7:-3]
+                elif response_text.startswith('```'):
+                    response_text = response_text[3:-3]
+                
+                # Try to parse as JSON
+                try:
+                    return json.loads(response_text)
+                except json.JSONDecodeError:
+                    # If not valid JSON, extract key information
+                    return self._parse_text_response(response_text)
+                    
+            except google_exceptions.ResourceExhausted as e:
+                # Extract retry delay from error message if available
+                retry_delay = 20  # Default 20 seconds
+                
+                # Try to extract retry delay from error message
+                error_str = str(e)
+                if "retry_delay" in error_str or "Please retry in" in error_str:
+                    try:
+                        # Extract seconds from error message (format: "Please retry in X.XXs")
+                        import re
+                        match = re.search(r'retry in ([\d.]+)s', error_str)
+                        if match:
+                            retry_delay = float(match.group(1)) + 2  # Add 2 seconds buffer
+                    except:
+                        pass
+                
+                if attempt < max_retries - 1:
+                    wait_time = min(retry_delay * (2 ** attempt), 60)  # Exponential backoff, max 60s
+                    logger.warning(
+                        f"API quota exceeded (attempt {attempt + 1}/{max_retries}). "
+                        f"Retrying in {wait_time:.1f} seconds..."
+                    )
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"LLM reasoning failed after {max_retries} attempts: {e}")
+                    # Return fallback response when quota is exhausted
+                    return {
+                        "reasoning": "API quota limit reached. Using fallback prediction.",
+                        "confidence_impact": -0.1,
+                        "quota_exceeded": True
+                    }
+            except Exception as e:
+                logger.error(f"LLM reasoning failed: {e}")
+                raise
     
     def _parse_text_response(self, response_text: str) -> Dict[str, Any]:
         """Parse non-JSON LLM response into structured format"""
@@ -558,9 +549,32 @@ Respond in JSON format:
 }}
 """
             
-            # Get Gemini's learning analysis
-            response = await self.llm.ainvoke(learning_prompt)
-            response_text = response.content.strip()
+            # Get Gemini's learning analysis with retry logic
+            max_retries = 3
+            response = None
+            for attempt in range(max_retries):
+                try:
+                    response = await self.llm.generate_content_async(learning_prompt)
+                    break
+                except google_exceptions.ResourceExhausted as e:
+                    if attempt < max_retries - 1:
+                        wait_time = min(20 * (2 ** attempt), 60)  # Exponential backoff
+                        logger.warning(
+                            f"Learning API quota exceeded (attempt {attempt + 1}/{max_retries}). "
+                            f"Retrying in {wait_time:.1f} seconds..."
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"Learning failed after {max_retries} attempts: {e}")
+                        return await self._mock_learning_cycle()
+                except Exception as e:
+                    logger.error(f"Learning failed: {e}")
+                    return await self._mock_learning_cycle()
+            
+            if not response:
+                return await self._mock_learning_cycle()
+                
+            response_text = response.text.strip()
             
             # Parse JSON response
             if response_text.startswith('```json'):

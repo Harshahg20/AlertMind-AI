@@ -241,26 +241,25 @@ class AutonomousDecisionAgent:
         # Initialize deterministic scorer
         self.scorer = DeterministicScorer()
         
-        # Initialize LLM
+        # Initialize LLM (required)
         self.llm = None
         self.llm_available = False
         
-        if GEMINI_AVAILABLE:
-            import os
-            api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
-            if api_key and api_key != "demo_key":
-                try:
-                    genai.configure(api_key=api_key)
-                    self.llm = genai.GenerativeModel('gemini-1.5-pro')
-                    self.llm_available = True
-                    logger.info("✅ Gemini 1.5 Pro loaded for autonomous decisions")
-                except Exception as e:
-                    logger.error(f"❌ Failed to load Gemini: {e}")
-                    self.llm_available = False
-            else:
-                logger.warning("⚠️ No Gemini API key provided, using deterministic fallback")
-        else:
-            logger.warning("⚠️ Gemini not available, using deterministic fallback")
+        if not GEMINI_AVAILABLE:
+            raise RuntimeError("google.generativeai not available. Install and configure Google AI SDK.")
+        
+        import os
+        api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key.")
+        try:
+            genai.configure(api_key=api_key)
+            self.llm = genai.GenerativeModel('gemini-2.5-flash')
+            self.llm_available = True
+            logger.info("✅ Gemini 1.5 Pro loaded for autonomous decisions")
+        except Exception as e:
+            logger.error(f"❌ Failed to load Gemini: {e}")
+            raise
     
     async def make_decision(self, context: DecisionContext) -> DecisionResult:
         """
@@ -281,15 +280,9 @@ class AutonomousDecisionAgent:
             fallback_used = False
             
             if self.llm_available:
-                try:
-                    reasoning = await self._get_llm_reasoning(context, scores, decision_type)
-                except Exception as e:
-                    logger.warning(f"LLM reasoning failed: {e}")
-                    reasoning = self._get_fallback_reasoning(context, scores, decision_type)
-                    fallback_used = True
+                reasoning = await self._get_llm_reasoning(context, scores, decision_type)
             else:
-                reasoning = self._get_fallback_reasoning(context, scores, decision_type)
-                fallback_used = True
+                raise RuntimeError("Gemini LLM not available for autonomous decision reasoning")
             
             # Step 4: Generate recommended actions
             actions = self._generate_actions(decision_type, context, scores)
@@ -391,33 +384,7 @@ class AutonomousDecisionAgent:
             logger.error(f"LLM reasoning error: {e}")
             raise
     
-    def _get_fallback_reasoning(self, context: DecisionContext, scores: Dict[str, float], 
-                               decision_type: DecisionType) -> str:
-        """Generate fallback reasoning without LLM"""
-        
-        reasons = []
-        
-        if scores['business_impact'] > 0.7:
-            reasons.append("High business impact detected")
-        
-        if scores['sla_risk'] > 0.6:
-            reasons.append("Significant SLA risk identified")
-        
-        if scores['cost_impact'] > 0.5:
-            reasons.append("Cost impact considerations")
-        
-        if context.business_hours:
-            reasons.append("During business hours - higher priority")
-        
-        if context.client_tier.lower() in ['enterprise', 'premium']:
-            reasons.append(f"High-tier client ({context.client_tier})")
-        
-        if not reasons:
-            reasons.append("Standard monitoring required")
-        
-        return f"Decision based on: {', '.join(reasons)}. " + \
-               f"Business impact: {scores['business_impact']:.1f}, " + \
-               f"SLA risk: {scores['sla_risk']:.1f}"
+    
     
     def _generate_actions(self, decision_type: DecisionType, context: DecisionContext, 
                          scores: Dict[str, float]) -> List[str]:
