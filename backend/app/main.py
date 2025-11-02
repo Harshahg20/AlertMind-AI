@@ -18,35 +18,56 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 app = FastAPI(
     title="CascadeGuard AI API",
     description="Intelligent Multi-Tenant Alert Orchestration with Agentic AI for MSPs",
-    version="2.0.0"
+    version="2.0.0",
+    redirect_slashes=False  # Disable automatic trailing slash redirects to avoid HTTP redirects
 )
 
 # Enable CORS for React frontend
 # Allow CORS origins from environment variable (comma-separated) or default to localhost
 cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
-cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+
+# Automatically allow all Cloud Run frontend origins (for production deployments)
+# This handles cases where frontend URLs change or multiple frontend instances exist
+# Use regex pattern to match any Cloud Run service (both .run.app and .a.run.app domains)
+cloud_run_regex = r"https://.*\.run\.app|https://.*\.a\.run\.app"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_origin_regex=cloud_run_regex,  # Allow all Cloud Run services
+    allow_credentials=False,  # Set to False since we're not using cookies/auth - this simplifies CORS
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Verify Google AI configuration at startup
+# Verify Google AI configuration at startup (graceful - does not crash if unavailable)
 @app.on_event("startup")
 async def verify_gemini_configuration():
+    import logging
+    logger = logging.getLogger(__name__)
+    
     api_key = os.getenv("GOOGLE_AI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key before starting the server.")
+    if not api_key or api_key == "demo_key":
+        logger.warning("⚠️ GOOGLE_AI_API_KEY not set or invalid. Server will run in fallback mode.")
+        logger.info("ℹ️ Set a valid GOOGLE_AI_API_KEY environment variable for AI-powered features.")
+        logger.info("ℹ️ All services will work with deterministic fallback algorithms.")
+        return
+    
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        # Lightweight readiness probe
-        _ = await model.generate_content_async("healthcheck")
+        model = genai.GenerativeModel('gemini-1.5-pro')
+        # Lightweight readiness probe (skip if it fails)
+        try:
+            await model.generate_content_async("healthcheck")
+            logger.info("✅ Gemini API key validated successfully")
+        except Exception as probe_error:
+            logger.warning(f"⚠️ Gemini API key validation failed (will use fallback mode): {probe_error}")
+            logger.info("ℹ️ Server will continue with fallback algorithms")
     except Exception as e:
-        raise RuntimeError(f"Gemini readiness check failed: {e}")
+        logger.warning(f"⚠️ Gemini configuration check failed (will use fallback mode): {e}")
+        logger.info("ℹ️ Server will continue running with deterministic fallback algorithms")
+        # Do not raise - allow server to start in fallback mode
 
 # Include API routes
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])

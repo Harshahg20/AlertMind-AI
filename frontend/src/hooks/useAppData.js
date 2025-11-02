@@ -16,32 +16,51 @@ export const useAppData = () => {
       try {
         setLoading(true);
 
-        // Fetch all data in parallel
-        const [
-          alertsData,
-          predictionsData,
-          clientsData,
-          statsData,
-          filteredAlerts,
-        ] = await Promise.all([
-          apiClient.getAllAlerts(),
-          apiClient.getAllPredictions(),
-          apiClient.getAllClients(),
-          apiClient.getAlertStats(),
-          apiClient.getFilteredAlerts(),
+        // Fetch all data in parallel with individual error handling
+        // This prevents one failing request from blocking others
+        const [alertsData, predictionsData, clientsData, statsData, filteredAlerts] = await Promise.all([
+          apiClient.getAllAlerts().catch(err => {
+            console.error("Failed to fetch alerts:", err);
+            return []; // Return empty array as fallback
+          }),
+          apiClient.getAllPredictions().catch(err => {
+            console.error("Failed to fetch predictions:", err);
+            return []; // Return empty array as fallback
+          }),
+          apiClient.getAllClients().catch(err => {
+            console.error("Failed to fetch clients:", err);
+            return []; // Return empty array as fallback
+          }),
+          apiClient.getAlertStats().catch(err => {
+            console.error("Failed to fetch stats:", err);
+            return {}; // Return empty object as fallback
+          }),
+          apiClient.getFilteredAlerts().catch(err => {
+            console.error("Failed to fetch filtered alerts:", err);
+            return null; // Return null as fallback
+          }),
         ]);
 
-        setAlerts(alertsData);
-        setPredictions(predictionsData);
-        setClients(clientsData);
-        setStats(statsData);
-        setFilteredData(filteredAlerts);
+        // Only set data if we got valid responses
+        if (alertsData && alertsData.length !== undefined) {
+          setAlerts(alertsData);
+        }
+        if (predictionsData && predictionsData.length !== undefined) {
+          setPredictions(predictionsData);
+        }
+        if (clientsData && clientsData.length !== undefined) {
+          setClients(clientsData);
+        }
+        if (statsData && typeof statsData === 'object') {
+          setStats(statsData);
+        }
+        if (filteredAlerts !== null) {
+          setFilteredData(filteredAlerts);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
-        // Show user-friendly error message
-        alert(
-          "Unable to connect to API. Please ensure the backend is running on port 8000."
-        );
+        // Don't show alert for individual failures - they're handled above
+        // Only show if there's a critical error
       } finally {
         setLoading(false);
       }

@@ -154,27 +154,35 @@ class EnhancedPatchManagementAgent:
         self.version = "2.0.0"
         self.created_at = datetime.now()
         
-        # Initialize Gemini LLM (required)
+        # Initialize Gemini LLM with graceful fallback
         import os
-        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
-        if not self.api_key:
-            raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key.")
-        try:
-            genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel(
-                'gemini-2.5-flash',
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                }
-            )
-            self.llm_available = True
-            logger.info("✅ Gemini 1.5 Pro loaded for enhanced patch management")
-        except Exception as e:
-            logger.error(f"❌ Failed to load Gemini: {e}")
-            raise
+        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY") or "demo_key"
+        self.model = None
+        self.llm_available = False
+        
+        if self.api_key and self.api_key != "demo_key":
+            try:
+                genai.configure(api_key=self.api_key)
+                self.model = genai.GenerativeModel(
+                    'gemini-1.5-pro',
+                    safety_settings={
+                        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                    }
+                )
+                self.llm_available = True
+                logger.info("✅ Gemini 1.5 Pro loaded for enhanced patch management")
+            except Exception as e:
+                logger.warning(f"⚠️ Gemini initialization failed (will use fallback mode): {str(e)}")
+                logger.info("ℹ️ Enhanced patch management will work with deterministic fallback algorithms")
+                self.model = None
+                self.llm_available = False
+                self.api_key = "demo_key"
+        else:
+            logger.info("ℹ️ No API key provided - using fallback mode for enhanced patch management")
+            logger.info("ℹ️ Set GOOGLE_AI_API_KEY environment variable for AI-powered analysis")
         
         # Agent memory for learning
         self.patch_history = []

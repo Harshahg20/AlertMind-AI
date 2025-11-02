@@ -1,28 +1,44 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-*.egg-info/
-dist/
-build/
-.env
-.venv
 venv/
-ENV/
 env/
-*.log
-.git/
-.gitignore
+ENV/
+.venv
+
+# Testing
 .pytest_cache/
 .coverage
 htmlcov/
-.DS_Store
+*.cover
+
+# IDE
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
-.vscode/
-.idea/
-test_*.py
-debug_*.py
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Environment
+.env
+.env.local
+settings.env
+
+# Build artifacts
+*.egg-info/
+dist/
+build/

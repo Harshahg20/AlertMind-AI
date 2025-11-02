@@ -8,8 +8,16 @@ from app.services.enhanced_patch_management_agent import EnhancedPatchManagement
 
 router = APIRouter()
 
-# Initialize the enhanced patch management agent
-patch_agent = EnhancedPatchManagementAgent()
+# Initialize the enhanced patch management agent with error handling
+patch_agent = None
+try:
+    patch_agent = EnhancedPatchManagementAgent()
+except Exception as e:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.error(f"Failed to initialize Enhanced Patch Management Agent: {e}")
+    # Create a minimal agent object for fallback - this will be handled by the agent itself
+    patch_agent = EnhancedPatchManagementAgent(api_key="demo_key")
 
 @router.get("/cve-analysis/{client_id}")
 async def analyze_cve_for_client(client_id: str, cve_id: str) -> Dict:

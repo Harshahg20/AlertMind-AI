@@ -1,46 +1,58 @@
 steps:
   # Build the container image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/alertmind-backend:latest', './backend']
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "gcr.io/alert-mind/alertmind-backend:${BUILD_ID}"
+      - "-t"
+      - "gcr.io/alert-mind/alertmind-backend:latest"
+      - "./backend"
 
   # Push the container image to Container Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/alertmind-backend:latest']
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/alert-mind/alertmind-backend:${BUILD_ID}"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/alert-mind/alertmind-backend:latest"]
 
   # Deploy container image to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
-      - 'run'
-      - 'deploy'
-      - 'alertmind-backend'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/alertmind-backend:latest'
-      - '--region'
-      - 'us-central1'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--port'
-      - '8000'
-      - '--memory'
-      - '2Gi'
-      - '--cpu'
-      - '2'
-      - '--min-instances'
-      - '1'
-      - '--max-instances'
-      - '10'
-      - '--set-env-vars'
-      - 'GOOGLE_AI_API_KEY=${_GOOGLE_AI_API_KEY}'
+      - "run"
+      - "deploy"
+      - "alertmind-backend"
+      - "--image"
+      - "gcr.io/alert-mind/alertmind-backend:${BUILD_ID}"
+      - "--region"
+      - "us-central1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--port"
+      - "8080"
+      - "--memory"
+      - "2Gi"
+      - "--cpu"
+      - "2"
+      - "--min-instances"
+      - "0"
+      - "--max-instances"
+      - "10"
+      - "--timeout"
+      - "300"
+      - "--set-env-vars"
+      - "GOOGLE_AI_API_KEY=${_GOOGLE_AI_API_KEY},CORS_ORIGINS=${_CORS_ORIGINS}"
 
 images:
-  - 'gcr.io/$PROJECT_ID/alertmind-backend:latest'
+  - "gcr.io/alert-mind/alertmind-backend:${BUILD_ID}"
+  - "gcr.io/alert-mind/alertmind-backend:latest"
 
 options:
-  machineType: 'E2_HIGHCPU_8'
+  machineType: "E2_HIGHCPU_8"
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:
-  _GOOGLE_AI_API_KEY: 'YOUR_GOOGLE_AI_API_KEY_HERE'
-
+  _GOOGLE_AI_API_KEY: ""
+  _CORS_ORIGINS: ""

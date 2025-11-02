@@ -145,16 +145,15 @@ class ITAdministrativeAgent:
         load_dotenv(backend_dir / ".env")
         load_dotenv(backend_dir / "settings.env")
         
-        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
-        if not self.api_key:
-            logger.warning("GOOGLE_AI_API_KEY not set. Agent will use fallback mode.")
-            self.model = None
-            self.llm_available = False
-        else:
+        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY") or "demo_key"
+        self.model = None
+        self.llm_available = False
+        
+        if self.api_key and self.api_key != "demo_key":
             try:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(
-                    'gemini-2.5-flash',
+                    'gemini-1.5-pro',
                     safety_settings={
                         HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
                         HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
@@ -163,11 +162,16 @@ class ITAdministrativeAgent:
                     }
                 )
                 self.llm_available = True
-                logger.info("✅ Gemini 2.5 Flash loaded for IT administrative tasks")
+                logger.info("✅ Gemini 1.5 Pro loaded for IT administrative tasks")
             except Exception as e:
-                logger.warning(f"❌ Failed to load Gemini: {e}. Using fallback mode.")
+                logger.warning(f"⚠️ Gemini initialization failed (will use fallback mode): {str(e)}")
+                logger.info("ℹ️ IT administrative tasks will work with deterministic fallback algorithms")
                 self.model = None
                 self.llm_available = False
+                self.api_key = "demo_key"
+        else:
+            logger.info("ℹ️ No API key provided - using fallback mode for IT administrative tasks")
+            logger.info("ℹ️ Set GOOGLE_AI_API_KEY environment variable for AI-powered analysis")
         
         # Agent memory and learning
         self.task_history = []

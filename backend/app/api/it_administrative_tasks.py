@@ -17,8 +17,13 @@ try:
     logger.info("IT Administrative Agent initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize IT Administrative Agent: {e}", exc_info=True)
-    # Create a minimal agent object for fallback
-    admin_agent = None
+    # Create a minimal agent object for fallback (with demo key)
+    try:
+        admin_agent = ITAdministrativeAgent(api_key="demo_key")
+        logger.info("IT Administrative Agent initialized in fallback mode")
+    except Exception as fallback_error:
+        logger.error(f"Failed to initialize fallback agent: {fallback_error}")
+        admin_agent = None
 
 # Cache for recommendations (client_id -> {tasks, timestamp})
 recommendations_cache = {}

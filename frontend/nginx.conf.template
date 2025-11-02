@@ -1,5 +1,5 @@
 server {
-    listen ${PORT};
+    listen ${PORT} default_server;
     server_name _;
     
     root /usr/share/nginx/html;
@@ -8,8 +8,17 @@ server {
     access_log /var/log/nginx/access.log;
     error_log /var/log/nginx/error.log warn;
 
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
+
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
     }
 
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
@@ -20,6 +29,14 @@ server {
     location = /health {
         return 200 "healthy\n";
         add_header Content-Type text/plain;
+    }
+
+    # Runtime configuration endpoint
+    location = /config.js {
+        add_header Content-Type application/javascript;
+        # This will be replaced at container startup with actual backend URL
+        return 200 "window.APP_CONFIG = { API_URL: '${BACKEND_API_URL}' };\n";
+        access_log off;
     }
 }
 

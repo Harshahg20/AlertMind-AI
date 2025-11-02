@@ -46,6 +46,24 @@ RUN chmod -R 755 /usr/share/nginx/html && \
 # Expose port (Cloud Run will provide PORT env var)
 EXPOSE 8080
 
-# nginx:alpine automatically processes templates in /etc/nginx/templates/ 
-# and substitutes environment variables
+# Set default PORT for nginx
+ENV PORT=8080
+
+# Install gettext package for envsubst
+RUN apk add --no-cache gettext
+
+# Create startup script to handle PORT variable and backend URL
+RUN echo '#!/bin/sh' > /docker-entrypoint.sh && \
+    echo 'set -e' >> /docker-entrypoint.sh && \
+    echo 'PORT=${PORT:-8080}' >> /docker-entrypoint.sh && \
+    echo 'BACKEND_API_URL=${BACKEND_API_URL:-http://localhost:8000/api}' >> /docker-entrypoint.sh && \
+    echo 'export PORT' >> /docker-entrypoint.sh && \
+    echo 'export BACKEND_API_URL' >> /docker-entrypoint.sh && \
+    echo 'envsubst '"'"'$PORT $BACKEND_API_URL'"'"' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf' >> /docker-entrypoint.sh && \
+    echo 'echo "Starting nginx on port $PORT with backend: $BACKEND_API_URL"' >> /docker-entrypoint.sh && \
+    echo 'exec nginx -g "daemon off;"' >> /docker-entrypoint.sh && \
+    chmod +x /docker-entrypoint.sh
+
+# Start nginx with environment variable substitution
+CMD ["/docker-entrypoint.sh"]
 
