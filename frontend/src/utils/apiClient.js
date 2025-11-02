@@ -1,4 +1,5 @@
-const API_BASE_URL = "http://localhost:8000/api";
+// Use environment variable if available, otherwise default to localhost for development
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000/api";
 
 class ApiClient {
   async request(endpoint, options = {}) {
