@@ -265,7 +265,7 @@ class AutonomousDecisionAgent:
             try:
                 list(genai.list_models())
                 self.llm_available = True
-                logger.info("✅ Gemini 1.5 Pro loaded and API key validated for autonomous decisions")
+                logger.info("✅ Gemini 2.5 Flash loaded and API key validated for autonomous decisions")
             except Exception as validation_error:
                 logger.warning(f"⚠️ API key validation failed (will use fallback mode): {str(validation_error)}")
                 logger.info("ℹ️ Autonomous decisions will work with deterministic fallback algorithms")

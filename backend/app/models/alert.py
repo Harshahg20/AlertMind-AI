@@ -51,6 +51,7 @@ class CascadePrediction(BaseModel):
     resolution_time_minutes: int  # Added missing field
     prevention_actions: List[str]
     pattern_matched: Optional[str] = None
+    affected_systems: Optional[List[str]] = []  # Added for frontend compatibility
 
 class AgentPrediction(BaseModel):
     """Enhanced prediction from Cascade Prediction Agent"""

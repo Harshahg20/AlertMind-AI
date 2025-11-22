@@ -19,6 +19,50 @@ except Exception as e:
     # Create a minimal agent object for fallback - this will be handled by the agent itself
     patch_agent = EnhancedPatchManagementAgent(api_key="demo_key")
 
+# Mock CVE Data
+MOCK_CVES = [
+    {
+        "cve": "CVE-2024-12345",
+        "severity": 9.8,
+        "product": "database",
+        "summary": "Critical RCE in SQL engine",
+        "published_date": "2024-01-15",
+        "affected_versions": ["1.0.0", "1.1.0", "1.2.0"]
+    },
+    {
+        "cve": "CVE-2025-10001",
+        "severity": 8.6,
+        "product": "web-app",
+        "summary": "Auth bypass in session handling",
+        "published_date": "2025-01-01",
+        "affected_versions": ["2.0.0", "2.1.0"]
+    },
+    {
+        "cve": "CVE-2024-56789",
+        "severity": 7.5,
+        "product": "api-gateway",
+        "summary": "DoS via malformed headers",
+        "published_date": "2024-03-20",
+        "affected_versions": ["3.0.0", "3.1.0", "3.2.0"]
+    },
+    {
+        "cve": "CVE-2023-98765",
+        "severity": 6.4,
+        "product": "storage-server",
+        "summary": "Privilege escalation in driver",
+        "published_date": "2023-12-10",
+        "affected_versions": ["4.0.0", "4.1.0"]
+    },
+    {
+        "cve": "CVE-2025-22222",
+        "severity": 9.1,
+        "product": "firewall",
+        "summary": "Policy injection vulnerability",
+        "published_date": "2025-01-10",
+        "affected_versions": ["5.0.0", "5.1.0", "5.2.0"]
+    }
+]
+
 @router.get("/cve-analysis/{client_id}")
 async def analyze_cve_for_client(client_id: str, cve_id: str) -> Dict:
     """Analyze a specific CVE for a client using AI"""
@@ -26,16 +70,36 @@ async def analyze_cve_for_client(client_id: str, cve_id: str) -> Dict:
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     
-    # Mock CVE data - in real implementation, this would come from CVE database
-    mock_cve_data = {
-        "cve": cve_id,
-        "severity": 8.5,
-        "product": "database",
-        "summary": "Critical vulnerability in database engine allowing remote code execution"
-    }
+    # Find CVE in mock database
+    cve_data = next((c for c in MOCK_CVES if c["cve"] == cve_id), None)
+    
+    if not cve_data:
+        # Generate dynamic mock data for unknown CVEs to ensure unique results
+        import hashlib
+        h = int(hashlib.sha256(cve_id.encode()).hexdigest(), 16)
+        
+        products = ["load-balancer", "auth-service", "payment-gateway", "logging-service", "email-server"]
+        severities = [5.5, 6.8, 7.2, 8.9, 9.5]
+        summaries = [
+            "Potential memory leak in processing loop",
+            "Improper input validation leading to XSS",
+            "Buffer overflow in legacy component",
+            "Unauthenticated access to admin endpoint",
+            "Remote code execution via deserialization"
+        ]
+        
+        cve_data = {
+            "cve": cve_id,
+            "severity": severities[h % len(severities)],
+            "product": products[h % len(products)],
+            "summary": summaries[h % len(summaries)]
+        }
     
     try:
-        cve_analysis = await patch_agent.analyze_cve_with_ai(mock_cve_data, client)
+        cve_analysis = await patch_agent.analyze_cve_with_ai(cve_data, client)
+        
+        # Calculate business impact
+        business_impact = cve_analysis.calculate_business_impact(client)
         
         return {
             "client_id": client_id,
@@ -48,7 +112,8 @@ async def analyze_cve_for_client(client_id: str, cve_id: str) -> Dict:
                 "patch_priority": cve_analysis.patch_priority,
                 "estimated_effort": cve_analysis.estimated_effort,
                 "risk_assessment": cve_analysis.risk_assessment,
-                "ai_analysis": cve_analysis.ai_analysis
+                "ai_analysis": cve_analysis.ai_analysis,
+                "business_impact": business_impact
             },
             "generated_at": datetime.now().isoformat()
         }
@@ -191,6 +256,72 @@ async def monitor_patch_execution(client_id: str, window_id: str) -> Dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Patch monitoring failed: {str(e)}")
 
+@router.post("/monitor-simulation/{client_id}")
+async def simulate_patch_execution(client_id: str) -> Dict:
+    """Simulate patch execution with realistic failures and AI remediation"""
+    client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    try:
+        simulation_data = await patch_agent.simulate_patch_execution(client_id)
+        
+        return {
+            "client_id": client_id,
+            "simulation_data": simulation_data,
+            "generated_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Patch simulation failed: {str(e)}")
+
+@router.post("/execution-readiness/{client_id}")
+async def get_execution_readiness(client_id: str, patch_plan_data: Dict) -> Dict:
+    """
+    Get comprehensive execution readiness analysis for IT teams.
+    This provides everything IT needs before executing patches:
+    - Pre-flight validation checklist
+    - Dependency impact analysis
+    - Rollback plan with time estimates
+    - Team assignments and escalation
+    - Success criteria and validation steps
+    """
+    client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    try:
+        # Reconstruct patch plan from data
+        from app.services.enhanced_patch_management_agent import PatchPlan, CVEAnalysis
+        
+        cve_analyses = []
+        for cve_data in patch_plan_data.get("cve_analyses", []):
+            analysis = CVEAnalysis(
+                cve_id=cve_data["cve_id"],
+                severity=cve_data["severity"],
+                product=cve_data["product"],
+                summary=cve_data.get("summary", ""),
+                client_impact=cve_data["client_impact"],
+                ai_analysis=cve_data.get("ai_analysis", {})
+            )
+            cve_analyses.append(analysis)
+        
+        patch_plan = PatchPlan(client, cve_analyses)
+        patch_plan.maintenance_windows = patch_plan_data.get("maintenance_windows", [])
+        
+        # Get maintenance optimization if provided
+        maintenance_optimization = patch_plan_data.get("maintenance_optimization", {})
+        
+        # Generate execution readiness
+        readiness = await patch_agent.generate_execution_readiness(patch_plan, maintenance_optimization)
+        
+        return {
+            "client_id": client_id,
+            "execution_readiness": readiness,
+            "generated_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Execution readiness analysis failed: {str(e)}")
+
 @router.get("/performance-metrics")
 async def get_patch_agent_metrics() -> Dict:
     """Get patch management agent performance metrics"""
@@ -207,52 +338,9 @@ async def get_patch_agent_metrics() -> Dict:
 async def get_cve_database() -> Dict:
     """Get available CVE database (mock data for demo)"""
     # In real implementation, this would connect to actual CVE databases
-    mock_cves = [
-        {
-            "cve": "CVE-2024-12345",
-            "severity": 9.8,
-            "product": "database",
-            "summary": "Critical RCE in SQL engine",
-            "published_date": "2024-01-15",
-            "affected_versions": ["1.0.0", "1.1.0", "1.2.0"]
-        },
-        {
-            "cve": "CVE-2025-10001",
-            "severity": 8.6,
-            "product": "web-app",
-            "summary": "Auth bypass in session handling",
-            "published_date": "2025-01-01",
-            "affected_versions": ["2.0.0", "2.1.0"]
-        },
-        {
-            "cve": "CVE-2024-56789",
-            "severity": 7.5,
-            "product": "api-gateway",
-            "summary": "DoS via malformed headers",
-            "published_date": "2024-03-20",
-            "affected_versions": ["3.0.0", "3.1.0", "3.2.0"]
-        },
-        {
-            "cve": "CVE-2023-98765",
-            "severity": 6.4,
-            "product": "storage-server",
-            "summary": "Privilege escalation in driver",
-            "published_date": "2023-12-10",
-            "affected_versions": ["4.0.0", "4.1.0"]
-        },
-        {
-            "cve": "CVE-2025-22222",
-            "severity": 9.1,
-            "product": "firewall",
-            "summary": "Policy injection vulnerability",
-            "published_date": "2025-01-10",
-            "affected_versions": ["5.0.0", "5.1.0", "5.2.0"]
-        }
-    ]
-    
     return {
-        "cve_database": mock_cves,
-        "total_cves": len(mock_cves),
+        "cve_database": MOCK_CVES,
+        "total_cves": len(MOCK_CVES),
         "last_updated": datetime.now().isoformat()
     }
 
@@ -309,6 +397,11 @@ async def analyze_cve_business_impact(client_id: str, cve_data: Dict) -> Dict:
                 "potential_downtime": f"{business_impact['estimated_downtime_minutes']} minutes",
                 "revenue_at_risk": f"${business_impact['revenue_at_risk_usd']:,.2f}",
                 "compliance_impact": business_impact["compliance_risk"]
+            },
+            "strategic_insights": {
+                "strategic_analysis": cve_analysis.ai_analysis.get("strategic_analysis", "Analysis not available"),
+                "what_if_scenario": cve_analysis.ai_analysis.get("what_if_scenario", "Scenario not available"),
+                "financial_impact_analysis": cve_analysis.ai_analysis.get("financial_impact_analysis", {})
             },
             "generated_at": datetime.now().isoformat()
         }
@@ -386,3 +479,82 @@ async def get_business_impact_summary(client_id: str) -> Dict:
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Business impact summary failed: {str(e)}")
+
+@router.get("/company-patch-reports")
+async def get_company_patch_reports() -> Dict:
+    """
+    Get aggregated patch reports for all companies.
+    Returns patch compliance status, risk levels, and pending patches per client.
+    """
+    try:
+        reports = []
+        
+        # Get mock CVE database
+        from app.api.enhanced_patch_management import get_cve_database
+        cve_db = await get_cve_database()
+        all_cves = cve_db["cve_database"]
+        
+        # Import timedelta here to avoid scope issues if not imported at top level
+        from datetime import timedelta
+        
+        for client in MOCK_CLIENTS:
+            # Simulate client-specific patch status
+            # In a real system, this would query the patch management database
+            
+            # Determine random but deterministic status based on client ID
+            import hashlib
+            h = int(hashlib.sha256(client.id.encode()).hexdigest(), 16)
+            
+            total_patches = 15 + (h % 10)
+            patched_count = 10 + (h % 5)
+            pending_count = total_patches - patched_count
+            
+            compliance_score = (patched_count / total_patches) * 100
+            
+            # Calculate risk level
+            if compliance_score < 70:
+                risk_level = "CRITICAL"
+            elif compliance_score < 85:
+                risk_level = "HIGH"
+            elif compliance_score < 95:
+                risk_level = "MEDIUM"
+            else:
+                risk_level = "LOW"
+                
+            # Get top pending patches (simulated)
+            pending_patches = []
+            if pending_count > 0:
+                # Pick random CVEs as pending
+                start_idx = h % len(all_cves)
+                for i in range(min(pending_count, 3)):
+                    cve = all_cves[(start_idx + i) % len(all_cves)]
+                    pending_patches.append({
+                        "cve_id": cve["cve"],
+                        "severity": cve["severity"],
+                        "product": cve["product"]
+                    })
+            
+            reports.append({
+                "client_id": client.id,
+                "client_name": client.name,
+                "tier": getattr(client, 'tier', 'Standard'),
+                "total_patches_managed": total_patches,
+                "patches_applied": patched_count,
+                "patches_pending": pending_count,
+                "compliance_score": round(compliance_score, 1),
+                "risk_level": risk_level,
+                "last_audit": (datetime.now() - timedelta(days=(h % 30))).strftime("%Y-%m-%d"),
+                "top_pending_patches": pending_patches
+            })
+            
+        # Sort by risk level (Critical first)
+        risk_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+        reports.sort(key=lambda x: risk_order.get(x["risk_level"], 4))
+        
+        return {
+            "generated_at": datetime.now().isoformat(),
+            "total_clients": len(reports),
+            "reports": reports
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate company reports: {str(e)}")

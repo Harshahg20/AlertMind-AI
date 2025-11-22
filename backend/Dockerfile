@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=100 -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
@@ -32,4 +32,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Run the application - use PORT env var for Cloud Run compatibility
 # Use shell form to support environment variable substitution
 CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"
-

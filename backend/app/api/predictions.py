@@ -94,22 +94,40 @@ async def get_all_predictions():
 
 @router.get("/client/{client_id}", response_model=List[CascadePrediction])
 async def get_client_predictions(client_id: str):
-    """Get cascade predictions for specific client"""
+    """Get cascade predictions for specific client - DYNAMIC with AI-generated data"""
     try:
+        from app.services.data_generator import data_generator
+        import uuid
+        
         # Find client
         client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
         
-        # Get client alerts
-        all_alerts = generate_mock_alerts()
-        client_alerts = [a for a in all_alerts if a.client_id == client_id and a.cascade_risk > 0.5]
+        # Generate dynamic predictions using the data generator
+        # This will create different predictions on each refresh
+        dynamic_predictions = data_generator.generate_client_predictions(client_id)
         
-        if not client_alerts:
-            return []
-        
-        # Generate predictions
-        predictions = prediction_engine.predict_cascade(client_alerts, client)
+        # Convert to CascadePrediction objects
+        predictions = []
+        for pred_data in dynamic_predictions:
+            prediction = CascadePrediction(
+                alert_id=f"alert_{uuid.uuid4().hex[:8]}",  # Generate unique alert ID
+                client_id=client_id,
+                pattern_matched=pred_data["pattern"],
+                affected_systems=pred_data.get("affected_systems", []),
+                predicted_cascade_systems=pred_data["predicted_cascade_systems"],
+                time_to_cascade_minutes=pred_data["time_to_cascade_minutes"],
+                resolution_time_minutes=pred_data["resolution_time_minutes"],
+                prediction_confidence=pred_data["prediction_confidence"],
+                prevention_actions=[
+                    f"Scale {pred_data['root_cause']} resources",
+                    "Enable automated failover",
+                    "Increase monitoring frequency",
+                    "Prepare rollback plan"
+                ]
+            )
+            predictions.append(prediction)
         
         return sorted(predictions, key=lambda x: x.prediction_confidence, reverse=True)
         

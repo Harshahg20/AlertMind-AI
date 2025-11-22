@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -11,7 +12,7 @@ import google.generativeai as genai
 # 2) backend/settings.env (fallback when dotfiles are restricted)
 # 3) project root .env
 backend_dir = Path(__file__).resolve().parents[1]
-load_dotenv(backend_dir / ".env")
+load_dotenv(backend_dir / ".env", override=True)
 load_dotenv(backend_dir / "settings.env")
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -56,7 +57,7 @@ async def verify_gemini_configuration():
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         # Lightweight readiness probe (skip if it fails)
         try:
             await model.generate_content_async("healthcheck")

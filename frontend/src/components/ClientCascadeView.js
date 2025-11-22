@@ -132,14 +132,44 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
 
   const getClientRiskLevel = (clientId) => {
     const enhanced = enhancedPredictions[clientId];
-    if (!enhanced?.prediction) return "low";
+    const basicPreds = clientPredictions[clientId] || [];
+    
+    // If enhanced predictions are available, use them
+    if (enhanced?.prediction) {
+      const urgency = enhanced.prediction.urgency_level;
+      const confidence = enhanced.prediction.confidence;
 
-    const urgency = enhanced.prediction.urgency_level;
-    const confidence = enhanced.prediction.confidence;
-
-    if (urgency === "critical" && confidence > 0.8) return "critical";
-    if (urgency === "high" && confidence > 0.7) return "high";
-    if (urgency === "medium" && confidence > 0.6) return "medium";
+      if (urgency === "critical" && confidence > 0.8) return "critical";
+      if (urgency === "high" && confidence > 0.7) return "high";
+      if (urgency === "medium" && confidence > 0.6) return "medium";
+      return "low";
+    }
+    
+    // Otherwise, calculate from basic predictions
+    if (basicPreds.length === 0) return "low";
+    
+    // Find highest risk prediction
+    let maxRisk = 0;
+    let criticalCount = 0;
+    
+    basicPreds.forEach(pred => {
+      const confidence = pred.prediction_confidence || 0;
+      const timeToFail = pred.time_to_cascade_minutes || 999;
+      
+      // Calculate risk score: higher confidence + shorter time = higher risk
+      const riskScore = confidence * (1 / Math.max(timeToFail, 1));
+      maxRisk = Math.max(maxRisk, riskScore);
+      
+      // Count critical predictions (high confidence + short time)
+      if (confidence > 0.7 && timeToFail < 10) {
+        criticalCount++;
+      }
+    });
+    
+    // Determine risk level based on calculations
+    if (criticalCount >= 2 || maxRisk > 0.15) return "critical";
+    if (criticalCount >= 1 || maxRisk > 0.08) return "high";
+    if (maxRisk > 0.04) return "medium";
     return "low";
   };
 

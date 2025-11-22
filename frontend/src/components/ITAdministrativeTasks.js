@@ -279,12 +279,19 @@ const ITAdministrativeTasks = ({ clients = [], loading = false }) => {
     }
   }, [complianceReports]);
 
+  const [showAgentTerminal, setShowAgentTerminal] = useState(false);
+  const [currentAgentLogs, setCurrentAgentLogs] = useState([]);
+  const [currentAgentStep, setCurrentAgentStep] = useState(0);
+  const [isAgentRunning, setIsAgentRunning] = useState(false);
+
   const executeTask = useCallback(async (clientId, taskType, priority = "medium") => {
     if (!clientId || !taskType) return;
 
     try {
       setLoadingData(true);
       console.log("Executing task:", { clientId, taskType, priority });
+      
+      // Start execution immediately
       const response = await apiClient.post(
         `/it-admin/execute/${clientId}`,
         {
@@ -298,11 +305,47 @@ const ITAdministrativeTasks = ({ clients = [], loading = false }) => {
       const execution = response.task_execution || response.data?.task_execution || response;
       
       if (execution) {
-        setExecutionResults((prev) => ({
-          ...prev,
-          [`${clientId}_${taskType}_${Date.now()}`]: execution,
-        }));
-        setActiveTab("execution");
+        // Check if we have agentic logs to simulate
+        if (execution.agentic_log && Array.isArray(execution.agentic_log)) {
+          // Start simulation
+          setShowAgentTerminal(true);
+          setIsAgentRunning(true);
+          setCurrentAgentLogs([]);
+          setCurrentAgentStep(0);
+          
+          // Process logs sequentially with delays
+          let accumulatedDelay = 0;
+          const logs = execution.agentic_log;
+          
+          logs.forEach((log, index) => {
+            setTimeout(() => {
+              setCurrentAgentLogs(prev => [...prev, log]);
+              setCurrentAgentStep(index + 1);
+              
+              // If this is the last log, finish simulation
+              if (index === logs.length - 1) {
+                setTimeout(() => {
+                  setIsAgentRunning(false);
+                  // Store result after simulation
+                  setExecutionResults((prev) => ({
+                    ...prev,
+                    [`${clientId}_${taskType}_${Date.now()}`]: execution,
+                  }));
+                  // Don't auto-close, let user see the "Complete" state
+                }, 1000);
+              }
+            }, accumulatedDelay);
+            
+            accumulatedDelay += (log.duration || 1000);
+          });
+        } else {
+          // No logs, just show result immediately
+          setExecutionResults((prev) => ({
+            ...prev,
+            [`${clientId}_${taskType}_${Date.now()}`]: execution,
+          }));
+          setActiveTab("execution");
+        }
         console.log("Execution result stored:", execution);
       } else {
         console.error("No execution result in response:", response);
@@ -458,9 +501,110 @@ const ITAdministrativeTasks = ({ clients = [], loading = false }) => {
     }
   };
 
+  // Agent Terminal Modal
+  const AgentTerminalModal = () => {
+    if (!showAgentTerminal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+          {/* Terminal Header */}
+          <div className="bg-gray-800 px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="flex space-x-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              </div>
+              <span className="ml-3 text-sm font-mono text-gray-400 flex items-center">
+                <Brain className="w-3 h-3 mr-2 text-purple-400" />
+                agent_executor.exe --mode=autonomous
+              </span>
+            </div>
+            <div className="flex items-center space-x-3">
+              {isAgentRunning ? (
+                <span className="text-xs text-green-400 animate-pulse flex items-center">
+                  <div className="w-2 h-2 bg-green-400 rounded-full mr-1"></div>
+                  RUNNING
+                </span>
+              ) : (
+                <span className="text-xs text-gray-400 flex items-center">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full mr-1"></div>
+                  COMPLETED
+                </span>
+              )}
+              <button 
+                onClick={() => {
+                  setShowAgentTerminal(false);
+                  setActiveTab("execution");
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+                disabled={isAgentRunning}
+              >
+                <span className="text-xs font-mono">[CLOSE]</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Terminal Body */}
+          <div className="flex-1 bg-black p-6 overflow-y-auto font-mono text-sm space-y-4 min-h-[400px]">
+            {currentAgentLogs.map((log, idx) => (
+              <div key={idx} className="animate-in fade-in slide-in-from-left-2 duration-300">
+                <div className="flex items-start space-x-3">
+                  <span className="text-gray-500 shrink-0">
+                    [{new Date().toLocaleTimeString()}]
+                  </span>
+                  <div className="flex-1">
+                    <span className={`font-bold mr-2 ${
+                      log.step === 'AI_INSIGHT' ? 'text-purple-400' :
+                      log.step === 'ERROR' ? 'text-red-400' :
+                      log.step === 'COMPLETE' ? 'text-green-400' :
+                      'text-blue-400'
+                    }`}>
+                      {log.step}:
+                    </span>
+                    <span className="text-gray-300 typing-effect">
+                      {log.message}
+                    </span>
+                  </div>
+                </div>
+                {log.step === 'AI_INSIGHT' && (
+                  <div className="ml-24 mt-1 p-2 bg-purple-900/20 border-l-2 border-purple-500 text-xs text-purple-200">
+                    Thinking Process: Analyzing patterns using Gemini 1.5 Pro context window...
+                  </div>
+                )}
+              </div>
+            ))}
+            {isAgentRunning && (
+              <div className="flex items-center space-x-2 ml-1 animate-pulse">
+                <span className="text-green-500">➜</span>
+                <div className="w-2 h-4 bg-green-500"></div>
+              </div>
+            )}
+            {!isAgentRunning && (
+              <div className="mt-6 pt-4 border-t border-gray-800 text-center">
+                <p className="text-green-400 mb-4">✨ Task Execution Completed Successfully</p>
+                <button
+                  onClick={() => {
+                    setShowAgentTerminal(false);
+                    setActiveTab("execution");
+                  }}
+                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded border border-gray-600 transition-colors text-xs font-mono"
+                >
+                  View Detailed Report
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Always render - ensure UI is visible
   return (
     <div className="space-y-6 p-6">
+      <AgentTerminalModal />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

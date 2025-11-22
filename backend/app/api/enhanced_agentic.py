@@ -183,80 +183,24 @@ async def get_enhanced_agent_insights():
 async def simulate_enhanced_agent_prediction(
     client_id: str = Query("client_001", description="Client ID for simulation")
 ):
-    """Simulate enhanced agent prediction with comprehensive data analysis"""
+    """Simulate enhanced agent prediction with REAL AI-generated data from Gemini"""
     try:
+        from app.services.data_generator import data_generator
+        
         client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
         
-        # Generate mock alerts for simulation
-        all_mock_alerts = generate_mock_alerts()
-        client_alerts = [a for a in all_mock_alerts if a.client_id == client_id and a.cascade_risk > 0.5]
-        
-        # If no high-risk alerts, create a mock critical alert
-        if not client_alerts:
-            mock_alert = Alert(
-                id=f"enhanced_alert_{client_id}_001",
-                client_id=client_id,
-                client_name=client.name,
-                system="database",
-                severity=SeverityLevel.CRITICAL,
-                message="Enhanced simulation: High CPU usage on primary database server with memory pressure.",
-                category=AlertCategory.PERFORMANCE,
-                timestamp=datetime.now(),
-                cascade_risk=0.8
-            )
-            client_alerts = [mock_alert]
-        
-        # Select 2-3 random alerts
-        import random
-        if len(client_alerts) >= 3:
-            selected_alerts = random.sample(client_alerts, 3)
-        elif len(client_alerts) >= 2:
-            selected_alerts = random.sample(client_alerts, 2)
-        else:
-            selected_alerts = client_alerts
-        
-        # Convert alerts to dictionaries for the agent
-        alert_dicts = []
-        for alert in selected_alerts:
-            alert_dict = {
-                'id': alert.id,
-                'client_id': alert.client_id,
-                'client_name': alert.client_name,
-                'system': alert.system,
-                'severity': alert.severity,
-                'message': alert.message,
-                'category': alert.category,
-                'timestamp': alert.timestamp.isoformat(),
-                'cascade_risk': alert.cascade_risk,
-                'is_correlated': alert.is_correlated
-            }
-            alert_dicts.append(alert_dict)
-        
-        # Prepare correlated data
-        correlated_data = {
-            'alerts': alert_dicts,
-            'client': client,
-            'historical_data': HISTORICAL_INCIDENTS
-        }
-        
-        # Get enhanced agent
-        agent = get_enhanced_cascade_agent()
-        
-        # Run enhanced prediction
-        prediction = await agent.run(correlated_data)
+        # Generate dynamic enhanced prediction using REAL Gemini AI
+        enhanced_prediction = await data_generator.generate_enhanced_prediction_with_ai(client_id)
         
         return {
             "simulation": True,
             "enhanced_analysis": True,
+            "ai_generated": enhanced_prediction["prediction"].get("ai_generated", False),
             "client": {"id": client.id, "name": client.name},
-            "alerts_analyzed": [{"id": a.id, "system": a.system, "severity": a.severity} for a in selected_alerts],
-            "prediction": prediction,
-            "comprehensive_data_used": prediction.get("enhanced_analysis", {}).get("comprehensive_data_used", False),
-            "system_health_score": prediction.get("enhanced_analysis", {}).get("system_health_score", 0),
-            "data_sources_count": prediction.get("enhanced_analysis", {}).get("data_sources_count", 0),
-            "llm_analysis_quality": prediction.get("enhanced_analysis", {}).get("llm_analysis_quality", "unknown"),
+            "prediction": enhanced_prediction["prediction"],
+            "metadata": enhanced_prediction["metadata"],
             "generated_at": datetime.now().isoformat()
         }
         
