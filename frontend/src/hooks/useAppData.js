@@ -69,9 +69,11 @@ export const useAppData = () => {
     fetchData();
 
     // Set up real-time updates every 30 seconds
-    const interval = setInterval(fetchData, 30000);
+    // DISABLED: Auto-refresh commented out to allow services to scale to zero
+    // Uncomment for demo mode to enable real-time updates
+    // const interval = setInterval(fetchData, 30000);
 
-    return () => clearInterval(interval);
+    // return () => clearInterval(interval);
   }, []);
 
   // Show notification for high-risk predictions

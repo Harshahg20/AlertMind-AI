@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from pathlib import Path
-from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution, enhanced_agentic, enhanced_patch_management, it_administrative_tasks
+from app.api import alerts, predictions, agentic, patch, alert_correlation_agent, autonomous_decision, prevention_execution, enhanced_agentic, enhanced_patch_management, it_administrative_tasks, operational_metrics, cascade_prevention_actions
 import os
 import google.generativeai as genai
 
@@ -80,6 +80,8 @@ app.include_router(autonomous_decision.router, prefix="/api/autonomous-decision"
 app.include_router(prevention_execution.router, prefix="/api/prevention-execution", tags=["prevention-execution-agent"])
 app.include_router(enhanced_patch_management.router, prefix="/api/enhanced-patch", tags=["enhanced-patch-management"])
 app.include_router(it_administrative_tasks.router, prefix="/api/it-admin", tags=["it-administrative-tasks"])
+app.include_router(operational_metrics.router, prefix="/api/metrics", tags=["operational-metrics"])
+app.include_router(cascade_prevention_actions.router, prefix="/api/cascade-prevention", tags=["cascade-prevention"])
 
 @app.get("/")
 def read_root():

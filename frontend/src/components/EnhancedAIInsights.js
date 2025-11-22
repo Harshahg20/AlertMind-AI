@@ -15,8 +15,10 @@ const EnhancedAIInsights = ({ clientId = "client_001" }) => {
   useEffect(() => {
     fetchEnhancedData();
     // Set up real-time updates every 30 seconds
-    const interval = setInterval(fetchEnhancedData, 30000);
-    return () => clearInterval(interval);
+    // DISABLED: Auto-refresh commented out to allow services to scale to zero
+    // Uncomment for demo mode to enable real-time updates
+    // const interval = setInterval(fetchEnhancedData, 30000);
+    // return () => clearInterval(interval);
   }, [clientId]);
 
   const fetchEnhancedData = async () => {

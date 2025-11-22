@@ -255,3 +255,134 @@ async def get_cve_database() -> Dict:
         "total_cves": len(mock_cves),
         "last_updated": datetime.now().isoformat()
     }
+
+@router.post("/analyze-business-impact/{client_id}")
+async def analyze_cve_business_impact(client_id: str, cve_data: Dict) -> Dict:
+    """
+    Analyze CVE with comprehensive business impact assessment
+    KEY ENDPOINT: Shows ROI of patch management with business metrics
+    
+    This endpoint demonstrates:
+    - Revenue at risk calculation
+    - Affected users estimation
+    - Compliance risk assessment
+    - Cost-benefit analysis
+    - Executive-friendly business justification
+    """
+    client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    try:
+        # Analyze CVE with AI
+        cve_analysis = await patch_agent.analyze_cve_with_ai(cve_data, client)
+        
+        # Calculate business impact
+        business_impact = cve_analysis.calculate_business_impact(client)
+        
+        return {
+            "client_id": client_id,
+            "client_name": client.name,
+            "client_tier": client.tier,
+            "cve_id": cve_analysis.cve_id,
+            "severity": cve_analysis.severity,
+            "technical_analysis": {
+                "patch_priority": cve_analysis.patch_priority,
+                "estimated_effort": cve_analysis.estimated_effort,
+                "risk_assessment": cve_analysis.risk_assessment,
+                "ai_analysis": cve_analysis.ai_analysis
+            },
+            "business_impact": business_impact,
+            "recommendation": {
+                "action": business_impact["recommended_action_timeline"],
+                "justification": business_impact["business_justification"],
+                "roi_summary": (
+                    f"Prevents ${business_impact['revenue_at_risk_usd']:,.2f} in potential losses. "
+                    f"Patch cost: ${business_impact['cost_benefit_analysis']['patch_cost_estimate_usd']:,.2f}. "
+                    f"ROI ratio: {business_impact['cost_benefit_analysis']['roi_ratio']}:1"
+                )
+            },
+            "executive_summary": {
+                "priority": business_impact["priority_level"],
+                "timeline": business_impact["recommended_action_timeline"],
+                "users_affected": f"{business_impact['affected_users_estimate']:,} users",
+                "potential_downtime": f"{business_impact['estimated_downtime_minutes']} minutes",
+                "revenue_at_risk": f"${business_impact['revenue_at_risk_usd']:,.2f}",
+                "compliance_impact": business_impact["compliance_risk"]
+            },
+            "generated_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Business impact analysis failed: {str(e)}")
+
+@router.get("/business-impact-summary/{client_id}")
+async def get_business_impact_summary(client_id: str) -> Dict:
+    """
+    Get business impact summary for all CVEs affecting a client
+    Shows aggregate business risk and ROI of patch management
+    """
+    client = next((c for c in MOCK_CLIENTS if c.id == client_id), None)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    try:
+        # Get mock CVE database
+        from app.api.enhanced_patch_management import get_cve_database
+        cve_db = await get_cve_database()
+        
+        # Analyze top 3 CVEs for demo
+        cve_list = cve_db["cve_database"][:3]
+        
+        total_revenue_at_risk = 0
+        total_affected_users = 0
+        critical_count = 0
+        high_count = 0
+        
+        cve_summaries = []
+        
+        for cve in cve_list:
+            cve_analysis = await patch_agent.analyze_cve_with_ai(cve, client)
+            business_impact = cve_analysis.calculate_business_impact(client)
+            
+            total_revenue_at_risk += business_impact["revenue_at_risk_usd"]
+            total_affected_users = max(total_affected_users, business_impact["affected_users_estimate"])
+            
+            if business_impact["priority_level"] == "CRITICAL":
+                critical_count += 1
+            elif business_impact["priority_level"] == "HIGH":
+                high_count += 1
+            
+            cve_summaries.append({
+                "cve_id": cve_analysis.cve_id,
+                "severity": cve_analysis.severity,
+                "priority": business_impact["priority_level"],
+                "revenue_at_risk": business_impact["revenue_at_risk_usd"],
+                "timeline": business_impact["recommended_action_timeline"]
+            })
+        
+        return {
+            "client_id": client_id,
+            "client_name": client.name,
+            "summary": {
+                "total_cves_analyzed": len(cve_list),
+                "critical_priority": critical_count,
+                "high_priority": high_count,
+                "total_revenue_at_risk_usd": round(total_revenue_at_risk, 2),
+                "total_revenue_at_risk_formatted": f"${total_revenue_at_risk:,.2f}",
+                "max_affected_users": total_affected_users,
+                "immediate_action_required": critical_count > 0
+            },
+            "cve_details": cve_summaries,
+            "executive_recommendation": (
+                f"Immediate action required for {critical_count} critical vulnerabilities. "
+                f"Total business risk: ${total_revenue_at_risk:,.2f}. "
+                f"Recommend emergency maintenance window within 24 hours."
+            ) if critical_count > 0 else (
+                f"Schedule maintenance for {high_count} high-priority vulnerabilities. "
+                f"Total business risk: ${total_revenue_at_risk:,.2f}. "
+                f"Recommend patching within 72 hours."
+            ),
+            "generated_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Business impact summary failed: {str(e)}")

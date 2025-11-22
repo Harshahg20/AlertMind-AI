@@ -161,8 +161,18 @@ class ITAdministrativeAgent:
                         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                     }
                 )
-                self.llm_available = True
-                logger.info("✅ Gemini 1.5 Pro loaded for IT administrative tasks")
+                
+                # Validate API key by attempting to list models
+                try:
+                    list(genai.list_models())
+                    self.llm_available = True
+                    logger.info("✅ Gemini 1.5 Pro loaded and API key validated for IT administrative tasks")
+                except Exception as validation_error:
+                    logger.warning(f"⚠️ API key validation failed (will use fallback mode): {str(validation_error)}")
+                    logger.info("ℹ️ IT administrative tasks will work with deterministic fallback algorithms")
+                    self.model = None
+                    self.llm_available = False
+                    self.api_key = "demo_key"
             except Exception as e:
                 logger.warning(f"⚠️ Gemini initialization failed (will use fallback mode): {str(e)}")
                 logger.info("ℹ️ IT administrative tasks will work with deterministic fallback algorithms")
@@ -517,7 +527,8 @@ class ITAdministrativeAgent:
         """Generate comprehensive compliance report using AI analysis"""
         
         if not self.llm_available:
-            raise RuntimeError("Gemini LLM not available for compliance report generation")
+            logger.info(f"LLM not available, using fallback compliance report for {client.id}")
+            return self._fallback_compliance_report(client)
         
         try:
             # Get recent task history for compliance analysis

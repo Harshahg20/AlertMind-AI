@@ -241,25 +241,41 @@ class AutonomousDecisionAgent:
         # Initialize deterministic scorer
         self.scorer = DeterministicScorer()
         
-        # Initialize LLM (required)
+        # Initialize LLM with graceful fallback
         self.llm = None
         self.llm_available = False
         
         if not GEMINI_AVAILABLE:
-            raise RuntimeError("google.generativeai not available. Install and configure Google AI SDK.")
+            logger.warning("⚠️ google.generativeai not available. Using fallback mode.")
+            logger.info("ℹ️ Install google-generativeai for AI-powered autonomous decisions")
+            return
         
         import os
         api_key = api_key or os.getenv("GOOGLE_AI_API_KEY")
-        if not api_key:
-            raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key.")
+        if not api_key or api_key == "demo_key":
+            logger.warning("⚠️ GOOGLE_AI_API_KEY not set or invalid. Using fallback mode.")
+            logger.info("ℹ️ Set a valid GOOGLE_AI_API_KEY environment variable for AI-powered decisions")
+            return
+            
         try:
             genai.configure(api_key=api_key)
             self.llm = genai.GenerativeModel('gemini-2.5-flash')
-            self.llm_available = True
-            logger.info("✅ Gemini 1.5 Pro loaded for autonomous decisions")
+            
+            # Validate API key by attempting to list models
+            try:
+                list(genai.list_models())
+                self.llm_available = True
+                logger.info("✅ Gemini 1.5 Pro loaded and API key validated for autonomous decisions")
+            except Exception as validation_error:
+                logger.warning(f"⚠️ API key validation failed (will use fallback mode): {str(validation_error)}")
+                logger.info("ℹ️ Autonomous decisions will work with deterministic fallback algorithms")
+                self.llm = None
+                self.llm_available = False
         except Exception as e:
-            logger.error(f"❌ Failed to load Gemini: {e}")
-            raise
+            logger.warning(f"⚠️ Failed to load Gemini (will use fallback mode): {e}")
+            logger.info("ℹ️ Autonomous decisions will work with deterministic fallback algorithms")
+            self.llm = None
+            self.llm_available = False
     
     async def make_decision(self, context: DecisionContext) -> DecisionResult:
         """
@@ -280,9 +296,15 @@ class AutonomousDecisionAgent:
             fallback_used = False
             
             if self.llm_available:
-                reasoning = await self._get_llm_reasoning(context, scores, decision_type)
+                try:
+                    reasoning = await self._get_llm_reasoning(context, scores, decision_type)
+                except Exception as llm_error:
+                    logger.warning(f"LLM reasoning failed, using fallback: {llm_error}")
+                    reasoning = self._get_fallback_reasoning(context, scores, decision_type)
+                    fallback_used = True
             else:
-                raise RuntimeError("Gemini LLM not available for autonomous decision reasoning")
+                reasoning = self._get_fallback_reasoning(context, scores, decision_type)
+                fallback_used = True
             
             # Step 4: Generate recommended actions
             actions = self._generate_actions(decision_type, context, scores)
@@ -384,6 +406,34 @@ class AutonomousDecisionAgent:
             logger.error(f"LLM reasoning error: {e}")
             raise
     
+    def _get_fallback_reasoning(self, context: DecisionContext, scores: Dict[str, float], 
+                                decision_type: DecisionType) -> str:
+        """Get deterministic reasoning when LLM is not available"""
+        
+        business_impact = scores['business_impact']
+        cost_impact = scores['cost_impact']
+        sla_risk = scores['sla_risk']
+        
+        # Build reasoning based on scores
+        reasoning_parts = []
+        
+        if decision_type == DecisionType.ESCALATE:
+            reasoning_parts.append(f"Escalation required due to high SLA risk ({sla_risk:.2f}) and business impact ({business_impact:.2f}).")
+            reasoning_parts.append(f"The {context.alert.severity} severity alert on {context.alert.system} requires immediate senior technician attention.")
+        elif decision_type == DecisionType.PREVENT:
+            reasoning_parts.append(f"Preventive action recommended with business impact score of {business_impact:.2f}.")
+            reasoning_parts.append(f"Automated failover and resource scaling will mitigate cascade risk ({context.alert.cascade_risk:.2f}).")
+        elif decision_type == DecisionType.MONITOR:
+            reasoning_parts.append(f"Monitoring approach selected based on moderate business impact ({business_impact:.2f}).")
+            reasoning_parts.append(f"Alert thresholds and documentation will track this {context.alert.severity} severity issue.")
+        else:  # IGNORE
+            reasoning_parts.append(f"Low business impact ({business_impact:.2f}) and SLA risk ({sla_risk:.2f}) indicate this can be logged for pattern analysis.")
+        
+        # Add client tier consideration
+        if context.client_tier.lower() == 'enterprise':
+            reasoning_parts.append(f"Enterprise tier client requires careful handling.")
+        
+        return " ".join(reasoning_parts)
     
     
     def _generate_actions(self, decision_type: DecisionType, context: DecisionContext, 

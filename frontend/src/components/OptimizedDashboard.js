@@ -28,6 +28,9 @@ const OptimizedDashboard = ({
   const [activeView, setActiveView] = useState("overview");
   const [clientStats, setClientStats] = useState({});
   const [selectedClient, setSelectedClient] = useState("all");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionResults, setActionResults] = useState(null);
+  const [showResultsModal, setShowResultsModal] = useState(false);
 
   useEffect(() => {
     if (alerts.length > 0) {
@@ -112,6 +115,194 @@ const OptimizedDashboard = ({
       default:
         return <AlertCircle className="w-4 h-4 text-gray-400" />;
     }
+  };
+
+  const handleTakeAction = async (prediction) => {
+    const alert = alerts.find((a) => a.id === prediction.alert_id);
+    
+    if (!alert) {
+      console.error("Alert not found for prediction");
+      return;
+    }
+
+    setActionLoading(true);
+    
+    try {
+      const response = await fetch(
+        "http://localhost:8000/api/cascade-prevention/execute-cascade-prevention",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            client_id: alert.client_id,
+            system: alert.system,
+            affected_systems: prediction.predicted_cascade_systems,
+            confidence: prediction.prediction_confidence,
+            time_to_cascade: prediction.time_to_cascade_minutes,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to execute prevention actions");
+      }
+
+      const result = await response.json();
+      setActionResults(result);
+      setShowResultsModal(true);
+    } catch (error) {
+      console.error("Action execution failed:", error);
+      alert("Failed to execute prevention actions. Please try again.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const ActionResultsModal = () => {
+    if (!showResultsModal || !actionResults) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-gray-700">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-green-600 to-blue-600 p-6 rounded-t-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="bg-white/20 p-3 rounded-full">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">
+                    ✅ Prevention Actions Executed
+                  </h2>
+                  <p className="text-green-100 text-sm">
+                    {actionResults.client_id} - {actionResults.system}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowResultsModal(false)}
+                className="text-white hover:bg-white/20 p-2 rounded-full transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Summary Metrics */}
+          <div className="p-6 bg-gray-900/50">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-gray-800 p-4 rounded-lg border border-green-500/30">
+                <p className="text-gray-400 text-xs mb-1">Actions Executed</p>
+                <p className="text-2xl font-bold text-green-400">
+                  {actionResults.summary.successful_actions}/
+                  {actionResults.summary.total_actions}
+                </p>
+              </div>
+              <div className="bg-gray-800 p-4 rounded-lg border border-blue-500/30">
+                <p className="text-gray-400 text-xs mb-1">Time Saved</p>
+                <p className="text-2xl font-bold text-blue-400">
+                  {actionResults.summary.time_saved_minutes}
+                  <span className="text-sm ml-1">min</span>
+                </p>
+              </div>
+              <div className="bg-gray-800 p-4 rounded-lg border border-purple-500/30">
+                <p className="text-gray-400 text-xs mb-1">Downtime Prevented</p>
+                <p className="text-2xl font-bold text-purple-400">
+                  {actionResults.summary.downtime_prevented_minutes}
+                  <span className="text-sm ml-1">min</span>
+                </p>
+              </div>
+              <div className="bg-gray-800 p-4 rounded-lg border border-yellow-500/30">
+                <p className="text-gray-400 text-xs mb-1">Cost Savings</p>
+                <p className="text-2xl font-bold text-yellow-400">
+                  ${actionResults.summary.estimated_cost_savings_usd.toFixed(0)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Executed Actions */}
+          <div className="p-6">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+              <Activity className="w-5 h-5 mr-2" />
+              Executed Actions
+            </h3>
+            <div className="space-y-3">
+              {actionResults.execution_results.map((action, index) => (
+                <div
+                  key={action.action_id}
+                  className="bg-gray-900/50 p-4 rounded-lg border border-gray-700"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-3 flex-1">
+                      <div className="bg-green-600 p-2 rounded-full mt-1">
+                        <Shield className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-white font-medium">
+                          {action.result_message}
+                        </p>
+                        <p className="text-gray-400 text-sm mt-1">
+                          Target: {action.target_system}
+                        </p>
+                        {action.metrics && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {Object.entries(action.metrics).map(([key, value]) => (
+                              <span
+                                key={key}
+                                className="px-2 py-1 bg-gray-800 text-gray-300 text-xs rounded"
+                              >
+                                {key}: {value}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right ml-4">
+                      <span className="px-2 py-1 bg-green-900/30 text-green-400 text-xs rounded-full">
+                        ✓ Success
+                      </span>
+                      <p className="text-gray-400 text-xs mt-1">
+                        {action.execution_time_seconds}s
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Next Steps */}
+          <div className="p-6 bg-gray-900/50 rounded-b-lg">
+            <h3 className="text-lg font-semibold text-white mb-3 flex items-center">
+              <Clock className="w-5 h-5 mr-2" />
+              Next Steps
+            </h3>
+            <ul className="space-y-2">
+              {actionResults.next_steps.map((step, index) => (
+                <li
+                  key={index}
+                  className="flex items-start space-x-2 text-gray-300"
+                >
+                  <span className="text-blue-400 mt-0.5">•</span>
+                  <span className="text-sm">{step}</span>
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={() => setShowResultsModal(false)}
+              className="mt-4 w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -381,9 +572,19 @@ const OptimizedDashboard = ({
                           Will affect:{" "}
                           {prediction.predicted_cascade_systems.join(", ")}
                         </div>
-                        <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors flex items-center">
-                          <Shield className="w-3 h-3 mr-1" />
-                          Take Action
+                        <button
+                          onClick={() => handleTakeAction(prediction)}
+                          disabled={actionLoading}
+                          className={`px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors flex items-center ${
+                            actionLoading ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          {actionLoading ? (
+                            <Activity className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <Shield className="w-3 h-3 mr-1" />
+                          )}
+                          {actionLoading ? "Executing..." : "Take Action"}
                         </button>
                       </div>
                     </div>
@@ -539,6 +740,7 @@ const OptimizedDashboard = ({
           </div>
         </div>
       )}
+      <ActionResultsModal />
     </div>
   );
 };

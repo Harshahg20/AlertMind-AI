@@ -138,11 +138,13 @@ const AgentControl = () => {
     fetchAgentData();
     
     // Much longer interval - only refresh every 60 seconds (was 30)
-    const interval = setInterval(() => {
-      fetchAgentData();
-    }, 60000); // Update every 60 seconds
+    // DISABLED: Auto-refresh commented out to allow services to scale to zero
+    // Uncomment for demo mode to enable real-time updates
+    // const interval = setInterval(() => {
+    //   fetchAgentData();
+    // }, 60000); // Update every 60 seconds
     
-    return () => clearInterval(interval);
+    // return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
 

@@ -225,3 +225,88 @@ async def get_alert_statistics():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/deduplicated")
+async def get_deduplicated_alerts():
+    """
+    Get deduplicated alerts with noise reduction metrics
+    KEY ENDPOINT: Demonstrates 70%+ alert noise reduction for MSPs
+    """
+    try:
+        from app.services.alert_deduplication import AlertDeduplicationEngine
+        
+        # Get all alerts
+        all_alerts = generate_mock_alerts()
+        
+        # Initialize deduplication engine with 5-minute time window
+        dedup_engine = AlertDeduplicationEngine(time_window_minutes=5)
+        
+        # Deduplicate alerts
+        result = dedup_engine.deduplicate_alerts(all_alerts)
+        
+        # Convert Alert objects to dicts for JSON serialization
+        result['unique_alerts'] = [alert.dict() for alert in result['unique_alerts']]
+        
+        # Convert duplicate groups
+        formatted_groups = []
+        for group in result['duplicate_groups']:
+            formatted_group = {
+                "primary_alert": group['primary_alert'].dict(),
+                "duplicate_alerts": [alert.dict() for alert in group['duplicate_alerts']],
+                "count": group['count'],
+                "signature": group['signature'],
+                "time_span_minutes": group['time_span_minutes'],
+                "severity": group['severity'],
+                "system": group['system'],
+                "category": group['category']
+            }
+            formatted_groups.append(formatted_group)
+        
+        result['duplicate_groups'] = formatted_groups
+        
+        # Add summary message
+        summary = dedup_engine.get_deduplication_summary(result)
+        
+        return {
+            "success": True,
+            "data": result,
+            "summary": summary,
+            "message": f"Reduced alert noise by {result['noise_reduction_percentage']}% - from {result['original_alert_count']} to {result['unique_alert_count']} alerts",
+            "time_saved_hours": round(result['statistics']['total_time_saved_minutes'] / 60, 1),
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/deduplicated/summary")
+async def get_deduplication_summary():
+    """
+    Get quick summary of deduplication benefits
+    """
+    try:
+        from app.services.alert_deduplication import AlertDeduplicationEngine
+        
+        all_alerts = generate_mock_alerts()
+        dedup_engine = AlertDeduplicationEngine(time_window_minutes=5)
+        result = dedup_engine.deduplicate_alerts(all_alerts)
+        
+        return {
+            "before": {
+                "total_alerts": result['original_alert_count'],
+                "estimated_review_time_hours": round(result['original_alert_count'] * 5 / 60, 1)
+            },
+            "after": {
+                "unique_alerts": result['unique_alert_count'],
+                "estimated_review_time_hours": round(result['unique_alert_count'] * 5 / 60, 1)
+            },
+            "improvement": {
+                "noise_reduction_percentage": result['noise_reduction_percentage'],
+                "time_saved_hours": round(result['statistics']['total_time_saved_minutes'] / 60, 1),
+                "efficiency_gain": f"{result['noise_reduction_percentage']}% fewer alerts to review"
+            },
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -69,6 +69,185 @@ class CVEAnalysis:
             "rollback_complexity": "high" if self.severity >= 8.0 else "medium",
             "testing_required": self.severity >= 6.0
         }
+    
+    def calculate_business_impact(self, client: Client) -> Dict[str, Any]:
+        """
+        Calculate comprehensive business impact score
+        KEY FEATURE: Shows ROI of patch management with business metrics
+        
+        Args:
+            client: Client object with business context
+            
+        Returns:
+            Dictionary with business impact metrics including:
+            - business_impact_score: Composite score (0-1)
+            - priority_level: CRITICAL/HIGH/MEDIUM/LOW
+            - affected_users_estimate: Number of users affected
+            - estimated_downtime_minutes: Potential downtime
+            - revenue_at_risk_usd: Potential revenue loss
+            - compliance_risk: Compliance impact assessment
+            - recommended_action_timeline: When to patch
+            - business_justification: Executive summary
+        """
+        # Base impact from CVE severity
+        severity_impact = self.severity / 10.0
+        
+        # Client criticality multiplier
+        critical_systems = getattr(client, 'critical_systems', [])
+        is_critical_system = self.product in critical_systems
+        criticality_multiplier = 2.0 if is_critical_system else 1.0
+        
+        # Exploitability factor from AI analysis
+        exploitability_map = {
+            "critical": 1.0,
+            "high": 0.8,
+            "medium": 0.5,
+            "low": 0.2
+        }
+        exploitability = exploitability_map.get(
+            self.ai_analysis.get("exploitability", "medium"), 0.5
+        )
+        
+        # Calculate composite business impact score
+        business_impact_score = (
+            severity_impact * 0.4 +
+            (1.0 if is_critical_system else 0.5) * 0.3 +
+            exploitability * 0.3
+        ) * min(criticality_multiplier, 1.5)  # Cap multiplier at 1.5
+        
+        # Estimate business metrics
+        affected_users = self._estimate_affected_users(client, is_critical_system)
+        estimated_downtime = self._estimate_downtime(self.severity)
+        revenue_at_risk = self._calculate_revenue_at_risk(
+            affected_users, estimated_downtime, client
+        )
+        
+        # Assess compliance risk
+        compliance_risk = self._assess_compliance_risk()
+        
+        # Get recommended action timeline
+        action_timeline = self._get_action_timeline(business_impact_score)
+        
+        # Generate business justification
+        business_justification = self._generate_business_justification(
+            business_impact_score, revenue_at_risk, affected_users, estimated_downtime
+        )
+        
+        return {
+            "business_impact_score": round(business_impact_score, 2),
+            "priority_level": self._get_priority_level(business_impact_score),
+            "affected_users_estimate": affected_users,
+            "estimated_downtime_minutes": estimated_downtime,
+            "revenue_at_risk_usd": revenue_at_risk,
+            "compliance_risk": compliance_risk,
+            "recommended_action_timeline": action_timeline,
+            "business_justification": business_justification,
+            "is_critical_system": is_critical_system,
+            "exploitability_level": self.ai_analysis.get("exploitability", "medium"),
+            "cost_benefit_analysis": {
+                "patch_cost_estimate_usd": estimated_downtime * 50,  # $50/min downtime cost
+                "risk_cost_estimate_usd": revenue_at_risk,
+                "roi_ratio": round(revenue_at_risk / max(estimated_downtime * 50, 1), 2)
+            }
+        }
+    
+    def _estimate_affected_users(self, client: Client, is_critical: bool) -> int:
+        """Estimate number of users affected by vulnerability"""
+        # Base user count (could be from client data in production)
+        base_users = 1000  # Assume 1000 users per client
+        
+        # Adjust based on client tier
+        tier_multipliers = {
+            "Enterprise": 2.0,
+            "Premium": 1.5,
+            "Standard": 1.0
+        }
+        tier = getattr(client, 'tier', 'Standard')
+        tier_multiplier = tier_multipliers.get(tier, 1.0)
+        
+        # Calculate affected users
+        if is_critical:
+            return int(base_users * tier_multiplier * 0.8)  # 80% of users
+        return int(base_users * tier_multiplier * 0.2)  # 20% of users
+    
+    def _estimate_downtime(self, severity: float) -> int:
+        """Estimate potential downtime in minutes based on severity"""
+        if severity >= 9.0:
+            return 240  # 4 hours for critical vulnerabilities
+        elif severity >= 7.0:
+            return 120  # 2 hours for high severity
+        elif severity >= 5.0:
+            return 60   # 1 hour for medium severity
+        return 30  # 30 minutes for low severity
+    
+    def _calculate_revenue_at_risk(self, users: int, downtime_minutes: int, client: Client) -> float:
+        """Calculate potential revenue at risk due to vulnerability"""
+        # Revenue per user per hour (industry average)
+        revenue_per_user_per_hour = 100
+        
+        # Adjust based on client tier
+        tier_revenue_multipliers = {
+            "Enterprise": 2.0,
+            "Premium": 1.5,
+            "Standard": 1.0
+        }
+        tier = getattr(client, 'tier', 'Standard')
+        tier_multiplier = tier_revenue_multipliers.get(tier, 1.0)
+        
+        hours = downtime_minutes / 60
+        revenue_at_risk = users * revenue_per_user_per_hour * hours * tier_multiplier
+        
+        return round(revenue_at_risk, 2)
+    
+    def _assess_compliance_risk(self) -> str:
+        """Assess compliance risk level based on vulnerability type"""
+        compliance_keywords = [
+            "data", "privacy", "security", "encryption", "authentication",
+            "authorization", "access", "credential", "password", "pii"
+        ]
+        summary_lower = self.summary.lower()
+        
+        keyword_matches = sum(1 for keyword in compliance_keywords if keyword in summary_lower)
+        
+        if keyword_matches >= 3:
+            return "CRITICAL - High compliance impact (HIPAA/PCI-DSS/SOC2/GDPR)"
+        elif keyword_matches >= 2:
+            return "HIGH - Moderate compliance impact"
+        elif keyword_matches >= 1:
+            return "MEDIUM - Some compliance considerations"
+        return "LOW - Minimal compliance impact"
+    
+    def _get_action_timeline(self, score: float) -> str:
+        """Get recommended action timeline based on business impact score"""
+        if score >= 0.8:
+            return "IMMEDIATE - Patch within 24 hours (emergency maintenance)"
+        elif score >= 0.6:
+            return "URGENT - Patch within 72 hours (next maintenance window)"
+        elif score >= 0.4:
+            return "SCHEDULED - Patch within 1 week (regular maintenance)"
+        return "ROUTINE - Patch in next monthly maintenance cycle"
+    
+    def _get_priority_level(self, score: float) -> str:
+        """Get priority level from business impact score"""
+        if score >= 0.8:
+            return "CRITICAL"
+        elif score >= 0.6:
+            return "HIGH"
+        elif score >= 0.4:
+            return "MEDIUM"
+        return "LOW"
+    
+    def _generate_business_justification(self, score: float, revenue: float, 
+                                        users: int, downtime: int) -> str:
+        """Generate executive-friendly business justification"""
+        return (
+            f"Business Impact Score: {score:.2f}/1.0. "
+            f"This vulnerability puts ${revenue:,.2f} in revenue at risk, "
+            f"affecting approximately {users:,} users with an estimated {downtime} minutes of potential downtime. "
+            f"Patching this vulnerability prevents significant business disruption, maintains SLA compliance, "
+            f"and protects customer trust. The cost of patching is minimal compared to the potential business impact."
+        )
+
 
 class PatchPlan:
     def __init__(self, client: Client, cve_analyses: List[CVEAnalysis]):
@@ -172,8 +351,18 @@ class EnhancedPatchManagementAgent:
                         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                     }
                 )
-                self.llm_available = True
-                logger.info("✅ Gemini 1.5 Pro loaded for enhanced patch management")
+                
+                # Validate API key by attempting to list models
+                try:
+                    list(genai.list_models())
+                    self.llm_available = True
+                    logger.info("✅ Gemini 1.5 Pro loaded and API key validated for enhanced patch management")
+                except Exception as validation_error:
+                    logger.warning(f"⚠️ API key validation failed (will use fallback mode): {str(validation_error)}")
+                    logger.info("ℹ️ Enhanced patch management will work with deterministic fallback algorithms")
+                    self.model = None
+                    self.llm_available = False
+                    self.api_key = "demo_key"
             except Exception as e:
                 logger.warning(f"⚠️ Gemini initialization failed (will use fallback mode): {str(e)}")
                 logger.info("ℹ️ Enhanced patch management will work with deterministic fallback algorithms")
@@ -200,7 +389,8 @@ class EnhancedPatchManagementAgent:
         """Analyze CVE using AI to determine client-specific impact and recommendations"""
         
         if not self.llm_available:
-            raise RuntimeError("Gemini LLM not available for CVE analysis")
+            logger.info(f"LLM not available, using fallback analysis for CVE {cve_data.get('cve', 'Unknown')}")
+            return self._fallback_cve_analysis(cve_data, client)
         
         try:
             # Prepare context for AI analysis
@@ -365,7 +555,8 @@ class EnhancedPatchManagementAgent:
         """Use AI to optimize maintenance windows based on client patterns"""
         
         if not self.llm_available:
-            raise RuntimeError("Gemini LLM not available for maintenance optimization")
+            logger.info(f"LLM not available, using fallback optimization for {patch_plan.client.id}")
+            return self._fallback_optimization(patch_plan)
         
         try:
             context = {
