@@ -588,6 +588,8 @@ class EnhancedPatchManagementAgent:
             optimized_windows.append({
                 "window_id": window["window_id"],
                 "optimized_time": optimized_time.isoformat(),
+                "estimated_duration": window.get("estimated_duration", 2),
+                "risk_level": window.get("risk_level", "MEDIUM"),
                 "reasoning": "Moved to off-hours to minimize business impact",
                 "success_probability": 0.85,
                 "risk_mitigation": ["Backup before patching", "Monitor during implementation"],
