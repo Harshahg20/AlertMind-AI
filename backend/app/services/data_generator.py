@@ -219,7 +219,7 @@ class EnhancedDataGenerator:
         try:
             # Configure Gemini
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash')
             
             # Generate base scenario
             scenario = random.choice(self.cascade_scenarios)
@@ -279,7 +279,7 @@ Be specific and technical. Make each response unique and insightful."""
                 },
                 "metadata": {
                     "generated_at": datetime.now().isoformat(),
-                    "model_version": "gemini-2.0-flash",
+                    "model_version": "gemini-1.5-flash",
                     "analysis_type": "ai_enhanced_cascade_prediction",
                     "ai_model_used": True
                 }

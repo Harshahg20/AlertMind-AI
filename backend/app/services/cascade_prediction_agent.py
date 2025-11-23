@@ -81,7 +81,7 @@ class CascadePredictionAgent(Agent):
         if not self.api_key:
             raise RuntimeError("GOOGLE_AI_API_KEY not set. Configure a valid Google AI API key.")
         genai.configure(api_key=self.api_key)
-        self.llm = genai.GenerativeModel('gemini-2.5-flash')
+        self.llm = genai.GenerativeModel('gemini-1.5-flash')
         
         # Initialize numeric prediction engine
         self.prediction_engine = CascadePredictionEngine()

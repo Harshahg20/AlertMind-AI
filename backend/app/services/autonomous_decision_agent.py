@@ -259,7 +259,7 @@ class AutonomousDecisionAgent:
             
         try:
             genai.configure(api_key=api_key)
-            self.llm = genai.GenerativeModel('gemini-2.5-flash')
+            self.llm = genai.GenerativeModel('gemini-1.5-flash')
             
             # Validate API key by attempting to list models
             try:
