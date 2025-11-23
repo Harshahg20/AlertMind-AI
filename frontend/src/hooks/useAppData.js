@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../utils/apiClient";
 
 export const useAppData = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("alerts");
   const [alerts, setAlerts] = useState([]);
   const [predictions, setPredictions] = useState([]);
   const [clients, setClients] = useState([]);
@@ -100,8 +100,18 @@ export const useAppData = () => {
     }
   }, [predictions]);
 
-  const handleTabChange = (tab) => {
+  const [remediationContext, setRemediationContext] = useState(null);
+
+  // ... existing code ...
+
+  const handleTabChange = (tab, context = null) => {
     setActiveTab(tab);
+    if (context) {
+      setRemediationContext(context);
+    } else if (tab !== "patch") {
+      // Clear context if navigating away from patch management, unless specifically preserving it
+      setRemediationContext(null);
+    }
   };
 
   return {
@@ -113,5 +123,6 @@ export const useAppData = () => {
     stats,
     filteredData,
     handleTabChange,
+    remediationContext,
   };
 };

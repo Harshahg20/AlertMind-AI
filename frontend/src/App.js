@@ -17,6 +17,7 @@ function App() {
     stats,
     filteredData,
     handleTabChange,
+    remediationContext,
   } = useAppData();
 
   if (loading && alerts.length === 0) {
@@ -38,6 +39,8 @@ function App() {
         loading={loading}
         stats={stats}
         filteredData={filteredData}
+        onTabChange={handleTabChange}
+        remediationContext={remediationContext}
       />
       <Box
         component="footer"

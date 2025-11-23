@@ -195,6 +195,20 @@ Respond with a valid JSON object containing:
     "dependency_chain_analysis": "<analysis>",
     "temporal_patterns": "<pattern analysis>",
     "external_factors": "<external factor analysis>"
+  },
+  "topology_graph": {
+    "nodes": [{"id": "<system_name>", "risk": "<critical|high|medium|low>", "type": "<db|app|lb|etc>"}],
+    "links": [{"source": "<system_name>", "target": "<system_name>", "status": "<active|stressed|failed>"}]
+  },
+  "predictive_timeline": [
+    {"time_offset": 0, "event": "Current State", "severity": "low"},
+    {"time_offset": 5, "event": "Database Latency Spike", "severity": "medium"},
+    {"time_offset": 15, "event": "Cascade Failure", "severity": "critical"}
+  ],
+  "prevention_simulation": {
+    "recommended_action": "Scale Database Replicas",
+    "probability_reduction": 0.45,
+    "time_saved": 120
   }
 }
 ```

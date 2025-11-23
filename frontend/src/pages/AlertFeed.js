@@ -11,13 +11,20 @@ import {
   Filter,
   Users,
   Activity,
+  Zap,
+  GitBranch,
+  CheckCircle2,
+  ArrowRight,
+  Layout,
+  List,
 } from "lucide-react";
 import { AlertFeedSkeleton } from "../components/SkeletonLoader";
 
-const AlertFeed = ({ alerts, filteredData, loading }) => {
+const AlertFeed = ({ alerts, filteredData, loading, onNavigate }) => {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [selectedClient, setSelectedClient] = useState("all");
   const [clientAlerts, setClientAlerts] = useState(alerts || []);
+  const [viewMode, setViewMode] = useState("grouped"); // 'grouped' or 'list'
 
   useEffect(() => {
     setClientAlerts(alerts || []);
@@ -119,43 +126,221 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
     return true;
   });
 
+  // Mock Incident Grouping Logic
+  const getIncidents = () => {
+    // In a real app, this would come from the backend AI analysis
+    const incidents = [];
+    
+    if (criticalAlerts.length > 0) {
+      // Create a "Patch Caused" incident if we have critical alerts
+      incidents.push({
+        id: "inc-001",
+        title: "Cascading Service Failure Detected",
+        severity: "critical",
+        client: "TechCorp",
+        root_cause: "Recent Patch Deployment (KB-45992) caused Memory Leak",
+        confidence: 98,
+        affected_systems: ["Web-01", "DB-Shard-04", "Auth-Service"],
+        alerts_count: criticalAlerts.length,
+        timestamp: new Date().toISOString(),
+        status: "active",
+        recommendation: "Rollback Patch KB-45992 immediately",
+        action_link: "patch"
+      });
+    }
+    
+    // Add a secondary incident if we have enough data
+    if (criticalAlerts.length > 3) {
+       incidents.push({
+        id: "inc-002",
+        title: "Unusual Network Traffic Pattern",
+        severity: "warning",
+        client: "FinServe",
+        root_cause: "Potential DDoS Attack Signature",
+        confidence: 85,
+        affected_systems: ["Gateway-01", "Firewall-Main"],
+        alerts_count: 2,
+        timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        status: "investigating",
+        recommendation: "Enable Traffic Shaping Rule #44",
+        action_link: "security"
+      });
+    }
+
+    return incidents;
+  };
+
+  const incidents = getIncidents();
+
   return (
     <div className="space-y-6">
       {/* Header with filtering summary */}
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <div>
             <h2 className="text-xl font-bold text-white flex items-center">
-              <AlertTriangle className="w-6 h-6 mr-2 text-red-400" />
+              <Zap className="w-6 h-6 mr-2 text-yellow-400" />
               Intelligent Alert Feed
             </h2>
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-400 text-sm mt-1">
               AI-powered noise reduction and correlation engine
             </p>
           </div>
 
-          {filteredData && (
-            <div className="text-right">
-              <div
-                className={`text-2xl font-bold ${
-                  filteredData.summary.noise_reduction_percent >= 0
-                    ? "text-green-400"
-                    : "text-red-400"
-                }`}
-              >
-                {filteredData.summary.noise_reduction_percent >= 0 ? "-" : "+"}
+          <div className="flex items-center bg-gray-700/50 p-1 rounded-lg border border-gray-600">
+            <button
+              onClick={() => setViewMode("grouped")}
+              className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                viewMode === "grouped"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              <GitBranch className="w-4 h-4 mr-2" />
+              AI Incident View
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                viewMode === "list"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              <List className="w-4 h-4 mr-2" />
+              Raw Alert List
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Row */}
+        {filteredData && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
+             <div className="text-center p-3 bg-gray-700/30 rounded border border-gray-600/30">
+              <div className="text-2xl font-bold text-white">
+                {filteredData.summary.total_alerts}
+              </div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider">Total Signals</div>
+            </div>
+            <div className="text-center p-3 bg-blue-900/20 rounded border border-blue-500/20">
+              <div className="text-2xl font-bold text-blue-400">
+                {incidents.length}
+              </div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider">Active Incidents</div>
+            </div>
+             <div className="text-center p-3 bg-green-900/20 rounded border border-green-500/20">
+              <div className="text-2xl font-bold text-green-400">
                 {Math.abs(filteredData.summary.noise_reduction_percent)}%
               </div>
-              <div className="text-sm text-gray-400">
-                {filteredData.summary.noise_reduction_percent >= 0
-                  ? "Alert noise reduced"
-                  : "Alert noise increased"}
+              <div className="text-xs text-gray-400 uppercase tracking-wider">Noise Reduced</div>
+            </div>
+            <div className="text-center p-3 bg-purple-900/20 rounded border border-purple-500/20">
+              <div className="text-2xl font-bold text-purple-400">
+                98%
               </div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider">AI Confidence</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {viewMode === "grouped" ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Active Incidents (AI Correlated)</h3>
+            <span className="text-xs text-gray-400">Sorted by Priority</span>
+          </div>
+          
+          {incidents.map((incident) => (
+            <div key={incident.id} className="bg-gray-800 rounded-lg border border-l-4 border-gray-700 border-l-red-500 overflow-hidden hover:border-gray-600 transition-all shadow-lg">
+              <div className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3 mb-2">
+                       <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded uppercase border border-red-500/30">
+                        {incident.severity}
+                      </span>
+                      <h3 className="text-xl font-bold text-white">{incident.title}</h3>
+                    </div>
+                    
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <div className="flex items-start">
+                          <div className="mt-1 mr-3 bg-blue-500/20 p-1.5 rounded">
+                            <Activity className="w-4 h-4 text-blue-400" />
+                          </div>
+                          <div>
+                            <div className="text-sm text-gray-400">Root Cause Analysis</div>
+                            <div className="text-base text-white font-medium">{incident.root_cause}</div>
+                            <div className="text-xs text-green-400 mt-1 flex items-center">
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              {incident.confidence}% AI Confidence
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-start">
+                          <div className="mt-1 mr-3 bg-purple-500/20 p-1.5 rounded">
+                            <Server className="w-4 h-4 text-purple-400" />
+                          </div>
+                          <div>
+                            <div className="text-sm text-gray-400">Affected Scope</div>
+                            <div className="text-sm text-gray-300">
+                              Client: <span className="text-white font-medium">{incident.client}</span>
+                            </div>
+                            <div className="text-sm text-gray-300">
+                              Systems: {incident.affected_systems.join(", ")}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+                        <div className="text-sm text-gray-400 mb-2">AI Recommendation</div>
+                        <div className="text-white font-medium mb-3">
+                          {incident.recommendation}
+                        </div>
+                        <button 
+                          onClick={() => onNavigate && onNavigate(incident.action_link, {
+                            client: incident.client,
+                            target: incident.affected_systems[0],
+                            action: "Rollback Patch KB-45992",
+                            root_cause: incident.root_cause
+                          })}
+                          className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded flex items-center justify-center transition-colors text-sm font-medium"
+                        >
+                          Execute Remediation
+                          <ArrowRight className="w-4 h-4 ml-2" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-6 pt-4 border-t border-gray-700 flex items-center justify-between text-sm text-gray-400">
+                  <div>
+                    Aggregated <span className="text-white font-medium">{incident.alerts_count} alerts</span> into this incident
+                  </div>
+                  <div>
+                    Last updated: {new Date(incident.timestamp).toLocaleTimeString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {incidents.length === 0 && (
+             <div className="text-center py-12 bg-gray-800 rounded-lg border border-gray-700">
+              <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">All Systems Operational</h3>
+              <p className="text-gray-400">No active incidents detected by AI correlation engine.</p>
             </div>
           )}
         </div>
-
-        {/* Filter Controls */}
+      ) : (
+        /* Original List View */
+        <>
+        {/* Filter Controls (Only show in List View) */}
         <div className="flex flex-wrap gap-4 mb-4">
           {(selectedFilter !== "all" || selectedClient !== "all") && (
             <div className="flex items-center space-x-2 text-sm text-blue-400">
@@ -214,36 +399,7 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
           </div>
         </div>
 
-        {/* Quick Stats */}
-        {filteredData && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-3 bg-gray-700/30 rounded">
-              <div className="text-lg font-bold text-white">
-                {filteredData.summary.total_alerts}
-              </div>
-              <div className="text-xs text-gray-400">Original</div>
-            </div>
-            <div className="text-center p-3 bg-green-900/20 rounded border border-green-500/20">
-              <div className="text-lg font-bold text-green-400">
-                {criticalAlerts.length}
-              </div>
-              <div className="text-xs text-gray-400">Filtered Critical</div>
-            </div>
-            <div className="text-center p-3 bg-blue-900/20 rounded border border-blue-500/20">
-              <div className="text-lg font-bold text-blue-400">
-                {filteredData.summary.correlated_groups}
-              </div>
-              <div className="text-xs text-gray-400">Correlated Groups</div>
-            </div>
-            <div className="text-center p-3 bg-yellow-900/20 rounded border border-yellow-500/20">
-              <div className="text-lg font-bold text-yellow-400">
-                {noiseAlerts.length}
-              </div>
-              <div className="text-xs text-gray-400">Filtered Noise</div>
-            </div>
-          </div>
-        )}
-      </div>
+
 
       {/* Critical Alerts Section */}
       <div className="bg-gray-800 rounded-lg border border-gray-700">
@@ -400,6 +556,8 @@ const AlertFeed = ({ alerts, filteredData, loading }) => {
             )}
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

@@ -16,6 +16,8 @@ const TabContent = ({
   loading,
   stats,
   filteredData,
+  onTabChange,
+  remediationContext,
 }) => {
   switch (activeTab) {
     case "dashboard":
@@ -34,6 +36,7 @@ const TabContent = ({
           alerts={alerts}
           filteredData={filteredData}
           loading={loading}
+          onNavigate={onTabChange}
         />
       );
     case "cascade":
@@ -41,7 +44,7 @@ const TabContent = ({
     case "ai":
       return <AgentControl />;
     case "patch":
-      return <EnhancedPatchManagement clients={clients} loading={loading} />;
+      return <EnhancedPatchManagement clients={clients} loading={loading} remediationContext={remediationContext} />;
     case "admin":
       return <ITAdministrativeTasks clients={clients} loading={loading} />;
     // case "ops":

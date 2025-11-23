@@ -331,7 +331,12 @@ class EnhancedCascadePredictionAgent:
                 "data_collection_time": comprehensive_data.get('collection_metadata', {}).get('collection_time_ms', 0),
                 "enhanced_mode": True,
                 "performance_metrics": self.performance_metrics
-            }
+            },
+            
+            # Visualization data for frontend
+            "topology_graph": llm_reasoning.get("topology_graph", engine_output.get("topology_graph", {})),
+            "predictive_timeline": llm_reasoning.get("predictive_timeline", engine_output.get("predictive_timeline", [])),
+            "prevention_simulation": llm_reasoning.get("prevention_simulation", engine_output.get("prevention_simulation", {}))
         }
         
         # Refine confidence based on data quality
@@ -709,6 +714,31 @@ class EnhancedCascadePredictionAgent:
                 "agent_name": self.name,
                 "analysis_timestamp": datetime.now().isoformat(),
                 "fallback_mode": True
+            },
+            "topology_graph": {
+                "nodes": [
+                    {"id": "Database", "risk": "critical", "type": "db"},
+                    {"id": "API Gateway", "risk": "high", "type": "app"},
+                    {"id": "Frontend", "risk": "medium", "type": "app"},
+                    {"id": "Auth Service", "risk": "low", "type": "service"}
+                ],
+                "links": [
+                    {"source": "Database", "target": "API Gateway", "status": "failed"},
+                    {"source": "API Gateway", "target": "Frontend", "status": "stressed"},
+                    {"source": "Auth Service", "target": "API Gateway", "status": "active"}
+                ]
+            },
+            "predictive_timeline": [
+                {"time_offset": 0, "event": "Current State: DB Connection Spike", "severity": "medium"},
+                {"time_offset": 5, "event": "API Latency Degradation", "severity": "high"},
+                {"time_offset": 12, "event": "Frontend Timeout Errors", "severity": "high"},
+                {"time_offset": 20, "event": "Complete Service Cascade", "severity": "critical"}
+            ],
+            "prevention_simulation": {
+                "recommended_action": "Enable Connection Pooling & Scale Replicas",
+                "probability_reduction": 0.75,
+                "time_saved": 180,
+                "simulated_outcome": "Risk reduced to Low (15%)"
             }
         }
     

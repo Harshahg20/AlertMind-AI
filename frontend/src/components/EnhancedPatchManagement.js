@@ -18,11 +18,14 @@ import {
   Clock,
   Network,
   Terminal,
+  Sparkles,
+  TrendingDown,
+  Users,
 } from "lucide-react";
 import { apiClient } from "../utils/apiClient";
 import { EnhancedPatchSkeleton } from "./SkeletonLoader";
 
-const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
+const EnhancedPatchManagement = ({ clients = [], loading = false, remediationContext = null }) => {
   const [selectedClient, setSelectedClient] = useState("all");
   const [cveDatabase, setCveDatabase] = useState([]);
   const [patchPlans, setPatchPlans] = useState({});
@@ -31,7 +34,7 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
   const [companyReports, setCompanyReports] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState("cve-analysis");
+  const [activeTab, setActiveTab] = useState(remediationContext ? "remediation" : "cve-analysis");
   const [selectedCves, setSelectedCves] = useState([]);
   const [analyzingCves, setAnalyzingCves] = useState(new Set());
   const [monitoringData, setMonitoringData] = useState(null);
@@ -40,6 +43,7 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
   const [loadingReadiness, setLoadingReadiness] = useState(false);
   const [expandedSections, setExpandedSections] = useState({});
   const [isExecuting, setIsExecuting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   // Safe clients array
   const displayClients = clients && Array.isArray(clients) ? clients : [];
@@ -68,8 +72,21 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
       fetchedRef.current = true;
       fetchCveDatabase();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayClients.length]);
+
+  // Handle Remediation Context
+  useEffect(() => {
+    if (remediationContext) {
+      setActiveTab("remediation");
+      // Auto-select the client from the context if available
+      if (remediationContext.client) {
+        const client = displayClients.find(c => c.name === remediationContext.client || c.id === remediationContext.client);
+        if (client) {
+          setSelectedClient(client.id);
+        }
+      }
+    }
+  }, [remediationContext, displayClients]);
 
   const fetchCveDatabase = useCallback(async () => {
     try {
@@ -140,17 +157,40 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
     }
   }, []);
 
-  const handleExecutePatchDeployment = useCallback(async () => {
+  const handleExecutePatchDeployment = useCallback(async (targetClientId) => {
     setIsExecuting(true);
     // Switch to monitoring tab
     setActiveTab("monitoring");
-    // Fetch monitoring simulation for the selected client
-    const clientId = selectedClient === "all" ? displayClients[0]?.id : selectedClient;
+    
+    // Use targetClientId if provided, otherwise fallback to selectedClient logic
+    const clientId = targetClientId || (selectedClient === "all" ? displayClients[0]?.id : selectedClient);
+    
     if (clientId) {
+      // Update selected client if we are in 'all' view so the monitoring tab shows the right one
+      if (selectedClient === "all") {
+        setSelectedClient(clientId);
+      }
       await fetchMonitoringSimulation();
     }
     setIsExecuting(false);
   }, [selectedClient, displayClients, fetchMonitoringSimulation, setActiveTab]);
+
+  const handleSimulateRollback = async () => {
+    setIsExecuting(true);
+    setActiveTab("monitoring");
+    // In a real app, we would call a specific rollback endpoint
+    // For demo, we'll re-use the monitoring simulation but with a "Rollback" context
+    const clientId = selectedClient === "all" ? displayClients[0]?.id : selectedClient;
+    if (clientId) {
+      await fetchMonitoringSimulation();
+    }
+    
+    // Simulate completion after 5 seconds (approx time of simulation)
+    setTimeout(() => {
+      setIsExecuting(false);
+      setShowSuccess(true);
+    }, 5000);
+  };
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -446,6 +486,7 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
             { id: "maintenance", label: "Maintenance", icon: Calendar },
             { id: "company-reports", label: "Company Reports", icon: Building },
             { id: "monitoring", label: "Monitoring", icon: BarChart3 },
+            ...(remediationContext ? [{ id: "remediation", label: "Incident Response", icon: AlertTriangle }] : []),
           ].map((tab) => (
             <button
               key={tab.id}
@@ -493,6 +534,10 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                 <h3 className="text-lg font-semibold text-white flex items-center">
                   <AlertTriangle className="w-5 h-5 mr-2 text-red-400" />
                   CVE Database Analysis
+                  <div className="ml-4 px-2 py-0.5 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-full flex items-center">
+                    <Sparkles className="w-3 h-3 text-blue-400 mr-1" />
+                    <span className="text-[10px] font-medium text-blue-300">Powered by Gemini 1.5 Flash</span>
+                  </div>
                 </h3>
                 {selectedClient !== "all" && (
                   <span className="text-xs text-blue-400 ml-7 mt-1">
@@ -1313,7 +1358,7 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                     {executionReadiness.can_execute_now && (
                       <div className="mt-6 flex justify-center">
                         <button 
-                          onClick={handleExecutePatchDeployment}
+                          onClick={() => handleExecutePatchDeployment(clientId)}
                           disabled={isExecuting}
                           className="px-8 py-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-lg font-bold text-lg transition-all transform hover:scale-105 disabled:scale-100 flex items-center shadow-lg"
                         >
@@ -1350,6 +1395,10 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                             <span className="text-sm font-medium text-white">
                               {window.window_id || `Window ${idx + 1}`}
                             </span>
+                            <div className="px-2 py-0.5 bg-purple-900/30 border border-purple-500/30 rounded text-[10px] text-purple-300 flex items-center ml-2 mr-auto">
+                              <Brain className="w-3 h-3 mr-1" />
+                              AI Optimized
+                            </div>
                             <div className={`px-2 py-1 rounded text-xs font-medium ${
                               window.risk_level === "CRITICAL" ? "text-red-400 bg-red-900/20" :
                               window.risk_level === "HIGH" ? "text-orange-400 bg-orange-900/20" :
@@ -1387,6 +1436,29 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                         </div>
                       ))}
                     </div>
+                    
+                    {/* Smart Schedule Timeline & Conflicts */}
+                    {optimization.conflicts_avoided && optimization.conflicts_avoided.length > 0 && (
+                      <div className="mt-4 bg-gradient-to-r from-green-900/10 to-blue-900/10 border border-green-500/20 rounded-lg p-4">
+                        <h5 className="text-sm font-medium text-green-400 mb-3 flex items-center">
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          AI Smart Scheduling Logic
+                        </h5>
+                        <div className="space-y-2">
+                          {optimization.conflicts_avoided.map((conflict, i) => (
+                            <div key={i} className="flex items-start space-x-2 text-xs text-gray-300">
+                              <div className="mt-0.5 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                <CheckCircle2 className="w-3 h-3 text-green-400" />
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Detected conflict with</span> <span className="font-medium text-white">{conflict.conflict}</span>
+                                <div className="text-green-400/80">↳ {conflict.resolution}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -1407,6 +1479,60 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                           Success Prediction:{" "}
                           {((optimization.success_prediction || 0.85) * 100).toFixed(1)}%
                         </div>
+
+                      {/* Risk Trajectory Chart */}
+                      {optimization.risk_trajectory && (
+                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-white mb-4 flex items-center">
+                            <TrendingDown className="w-4 h-4 mr-2 text-blue-400" />
+                            Projected Risk Reduction
+                          </h5>
+                          <div className="h-32 flex items-end space-x-4 px-2">
+                            {optimization.risk_trajectory.map((point, i) => (
+                              <div key={i} className="flex-1 flex flex-col items-center group">
+                                <div className="w-full relative flex items-end justify-center h-24 bg-gray-800/50 rounded-t-lg overflow-hidden">
+                                  <div 
+                                    style={{ height: `${point.risk_score}%` }} 
+                                    className={`w-full transition-all duration-1000 ease-out ${
+                                      i === 0 ? 'bg-red-500/50' : 
+                                      i === optimization.risk_trajectory.length - 1 ? 'bg-green-500/50' : 'bg-blue-500/50'
+                                    }`}
+                                  ></div>
+                                  <span className="absolute bottom-1 text-[10px] font-bold text-white drop-shadow-md">
+                                    {point.risk_score}
+                                  </span>
+                                </div>
+                                <div className="mt-2 text-[10px] text-center text-gray-400 leading-tight">
+                                  {point.label}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Resource Allocation */}
+                      {optimization.detailed_resource_allocation && (
+                        <div className="mt-4 bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-white mb-3 flex items-center">
+                            <Users className="w-4 h-4 mr-2 text-orange-400" />
+                            Resource Allocation
+                          </h5>
+                          <div className="grid grid-cols-2 gap-2">
+                            {optimization.detailed_resource_allocation.map((res, i) => (
+                              <div key={i} className="bg-gray-800 p-2 rounded border border-gray-700 flex justify-between items-center">
+                                <span className="text-xs text-gray-300">{res.role}</span>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs font-mono text-blue-400">{res.hours}h</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                    res.status === 'Available' ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'
+                                  }`}>{res.status}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                         {optimization.estimated_total_downtime !== undefined && (
                           <div className="text-sm text-gray-400">
                             Estimated Total Downtime: {optimization.estimated_total_downtime}h
@@ -1608,6 +1734,103 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
         </div>
       )}
 
+      {/* Remediation Tab (Incident Response) */}
+      {activeTab === "remediation" && remediationContext && (
+        <div className="space-y-6 animate-in fade-in duration-500">
+          <div className="bg-red-900/20 border border-red-700 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-white flex items-center">
+                  <AlertTriangle className="w-6 h-6 mr-3 text-red-500" />
+                  Incident Response: Active Remediation
+                </h3>
+                <p className="text-red-300 mt-1">
+                  Target: {remediationContext.target || "Unknown System"} • Action: {remediationContext.action || "Investigation"}
+                </p>
+              </div>
+              <div className="px-4 py-2 bg-red-900/40 rounded-lg border border-red-500/30 animate-pulse">
+                <span className="text-red-400 font-mono font-bold">CRITICAL INCIDENT IN PROGRESS</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Root Cause Analysis Card */}
+              <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
+                  <Brain className="w-4 h-4 mr-2 text-purple-400" />
+                  AI Root Cause Analysis
+                </h4>
+                <div className="space-y-3">
+                  <div className="bg-gray-900/50 p-3 rounded border border-gray-700">
+                    <div className="text-xs text-gray-500 uppercase mb-1">Trigger Event</div>
+                    <div className="text-sm text-white font-mono">Patch Deployment KB-45992</div>
+                  </div>
+                  <div className="bg-gray-900/50 p-3 rounded border border-gray-700">
+                    <div className="text-xs text-gray-500 uppercase mb-1">Impact Chain</div>
+                    <div className="text-sm text-gray-300">
+                      Memory Leak → Web Service Latency → <span className="text-red-400">Service Crash</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-400">
+                    <span>Confidence Score:</span>
+                    <span className="text-green-400 font-bold">98.5%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Impact Simulation Card */}
+              <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
+                  <Activity className="w-4 h-4 mr-2 text-blue-400" />
+                  Remediation Simulation
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-400">Projected Health Recovery</span>
+                      <span className="text-green-400">99.9%</span>
+                    </div>
+                    <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
+                      <div className="bg-green-500 h-full rounded-full w-[99%]"></div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-gray-900/50 p-2 rounded text-center">
+                      <div className="text-xs text-gray-500">Est. Downtime</div>
+                      <div className="text-sm font-mono text-white">~45s</div>
+                    </div>
+                    <div className="bg-gray-900/50 p-2 rounded text-center">
+                      <div className="text-xs text-gray-500">Data Loss</div>
+                      <div className="text-sm font-mono text-green-400">0%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Card */}
+              <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 flex flex-col justify-between">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
+                    <Shield className="w-4 h-4 mr-2 text-green-400" />
+                    Recommended Action
+                  </h4>
+                  <p className="text-sm text-gray-400 mb-4">
+                    AI recommends an immediate rollback of patch KB-45992 to restore service stability.
+                  </p>
+                </div>
+                <button
+                  onClick={handleSimulateRollback}
+                  className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-lg shadow-red-900/20 transition-all transform hover:scale-[1.02] flex items-center justify-center"
+                >
+                  <RefreshCw className="w-5 h-5 mr-2" />
+                  Execute Rollback Sequence
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Monitoring Tab */}
       {activeTab === "monitoring" && (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -1648,7 +1871,9 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                     <Activity className="w-6 h-6 text-blue-400" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-white">Live Patch Operations Center</h3>
+                    <h3 className="text-lg font-semibold text-white">
+                      {remediationContext ? "Live Rollback Operations" : "Live Patch Operations Center"}
+                    </h3>
                     <div className="flex items-center space-x-2 mt-1">
                       <span className="flex h-2 w-2 relative">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -1892,6 +2117,40 @@ const EnhancedPatchManagement = ({ clients = [], loading = false }) => {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Success Overlay */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] animate-in fade-in duration-300">
+          <div className="bg-gray-800 border border-green-500/50 rounded-xl p-8 max-w-md w-full text-center shadow-2xl shadow-green-900/50 transform animate-in zoom-in-95 duration-300">
+            <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 className="w-10 h-10 text-green-400" />
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">Remediation Complete</h3>
+            <p className="text-gray-300 mb-6">
+              Patch KB-45992 has been successfully rolled back. System stability has been restored to 99.9%.
+            </p>
+            <div className="bg-gray-900/50 rounded-lg p-4 mb-6 border border-gray-700">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-400">Services Restored</span>
+                <span className="text-green-400">3/3</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Mean Time to Recover</span>
+                <span className="text-blue-400">45s</span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setShowSuccess(false);
+                setActiveTab("cve-analysis");
+                // Optional: Clear remediation context here if we had a callback
+              }}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors"
+            >
+              Return to Dashboard
+            </button>
           </div>
         </div>
       )}

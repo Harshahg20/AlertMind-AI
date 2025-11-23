@@ -8,6 +8,7 @@ import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import numpy as np
 from app.models.alert import Client
+from app.services.gemini_service import GeminiService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -333,46 +334,14 @@ class EnhancedPatchManagementAgent:
         self.version = "2.1.0"
         self.created_at = datetime.now()
         
-        # Initialize Gemini LLM with graceful fallback
-        import os
-        self.api_key = api_key or os.getenv("GOOGLE_AI_API_KEY") or "demo_key"
-        self.model = None
-        self.llm_available = False
+        # Initialize Gemini Service
+        self.gemini_service = GeminiService()
+        self.llm_available = self.gemini_service.model is not None
         
-        if self.api_key and self.api_key != "demo_key":
-            try:
-                genai.configure(api_key=self.api_key)
-                # Using Gemini 1.5 Pro for robust reasoning and large context window
-                self.model = genai.GenerativeModel(
-                    'gemini-1.5-pro',
-                    safety_settings={
-                        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                    }
-                )
-                
-                # Validate API key by attempting to list models
-                try:
-                    list(genai.list_models())
-                    self.llm_available = True
-                    logger.info("✅ Gemini 1.5 Pro loaded and API key validated for enhanced patch management")
-                except Exception as validation_error:
-                    logger.warning(f"⚠️ API key validation failed (will use fallback mode): {str(validation_error)}")
-                    logger.info("ℹ️ Enhanced patch management will work with deterministic fallback algorithms")
-                    self.model = None
-                    self.llm_available = False
-                    self.api_key = "demo_key"
-            except Exception as e:
-                logger.warning(f"⚠️ Gemini initialization failed (will use fallback mode): {str(e)}")
-                logger.info("ℹ️ Enhanced patch management will work with deterministic fallback algorithms")
-                self.model = None
-                self.llm_available = False
-                self.api_key = "demo_key"
+        if self.llm_available:
+            logger.info("✅ GeminiService loaded for enhanced patch management")
         else:
-            logger.info("ℹ️ No API key provided - using fallback mode for enhanced patch management")
-            logger.info("ℹ️ Set GOOGLE_AI_API_KEY environment variable for AI-powered analysis")
+            logger.warning("⚠️ GeminiService failed to load, using fallback")
         
         # Agent memory for learning
         self.patch_history = []
@@ -395,94 +364,26 @@ class EnhancedPatchManagementAgent:
         
         try:
             # Prepare context for AI analysis
-            context = {
+            cve_details = {
                 "cve_id": cve_data.get("cve", "Unknown"),
                 "severity": cve_data.get("severity", 0),
                 "product": cve_data.get("product", "Unknown"),
-                "summary": cve_data.get("summary", "No description available"),
-                "client_critical_systems": client.critical_systems,
-                "client_system_dependencies": client.system_dependencies,
-                "client_business_hours": getattr(client, 'business_hours', '9-17 UTC'),
-                "client_compliance_requirements": getattr(client, 'compliance_requirements', [])
+                "summary": cve_data.get("summary", "No description available")
             }
             
-            prompt = f"""
-            You are an expert Chief Information Security Officer (CISO) and Cybersecurity Analyst. 
-            Analyze this CVE for a specific client environment with a focus on Business Impact, Strategic Risk, and Operational Resilience.
-
-            CVE: {context['cve_id']}
-            Severity: {context['severity']}/10
-            Product: {context['product']}
-            Description: {context['summary']}
+            client_context = {
+                "industry": getattr(client, 'industry', 'Technology'),
+                "critical_systems": client.critical_systems,
+                "system_dependencies": client.system_dependencies,
+                "business_hours": getattr(client, 'business_hours', '9-17 UTC'),
+                "compliance_requirements": getattr(client, 'compliance_requirements', [])
+            }
             
-            Client Environment:
-            - Critical Systems: {context['client_critical_systems']}
-            - System Dependencies: {context['client_system_dependencies']}
-            - Business Hours: {context['client_business_hours']}
-            - Compliance Requirements: {context['client_compliance_requirements']}
+            # Call Gemini Service
+            ai_analysis = await self.gemini_service.generate_patch_analysis(cve_details, client_context)
             
-            Provide a comprehensive analysis in JSON format. 
-            CRITICAL: Ensure the response is valid JSON. Do not include markdown formatting outside the JSON block.
-            
-            Required JSON Structure:
-            {{
-                "client_impact_score": 0.0-1.0,
-                "business_impact": "low/medium/high/critical",
-                "exploitability": "low/medium/high/critical",
-                "patch_urgency": "immediate/high/medium/low",
-                "executive_summary": "Compelling 2-3 sentence summary for the Board of Directors highlighting business risk.",
-                "strategic_analysis": "A paragraph explaining the strategic implications of this vulnerability.",
-                "compliance_badges": ["list of specific regulations at risk e.g. GDPR Art. 32, HIPAA Security Rule, PCI-DSS 6.2"],
-                "probability_of_exploitation_percentage": 0-100,
-                "blast_radius_details": {{
-                    "direct_affected_systems": ["list of directly affected systems"],
-                    "indirect_affected_systems": ["list of downstream dependent systems"],
-                    "estimated_outage_impact": "Detailed description of potential service degradation"
-                }},
-                "affected_systems": ["list of affected systems"],
-                "potential_blast_radius": "Description of the 'blast radius' if exploited",
-                "compliance_implications": ["Detailed list of compliance violations"],
-                "recommended_actions": ["Strategic actions to take"],
-                "detailed_recommendation_steps": [
-                    {{"step": "Step 1", "description": "Actionable detail", "estimated_time": "30m", "role": "DevOps Engineer"}},
-                    {{"step": "Step 2", "description": "Actionable detail", "estimated_time": "1h", "role": "DBA"}}
-                ],
-                "testing_requirements": ["Specific tests (e.g., Unit, Integration, UAT)"],
-                "rollback_complexity": "low/medium/high",
-                "maintenance_window_preference": "immediate/off_hours/weekend",
-                "risk_mitigation": ["Mitigation 1", "Mitigation 2"],
-                "realistic_implementation_time_hours": 2.5,
-                "financial_impact_analysis": {{
-                    "estimated_cost_of_exploitation": "Estimated financial loss in USD (e.g., $150,000)",
-                    "cost_of_inaction": "Description of costs if ignored (reputation, fines)",
-                    "patching_roi": "ROI description (e.g. 'Very High - prevents $150k loss with $500 effort')",
-                    "operational_risk_score": 75
-                }},
-                "what_if_scenario": "A realistic scenario describing what happens if this is exploited (e.g., 'Attacker gains root access, exfiltrates customer DB...')"
-            }}
-            """
-            
-            response = await self.model.generate_content_async(prompt)
-            response_text = response.text.strip()
-            
-            # Try to extract JSON from markdown code blocks if present
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-            
-            # Try to parse JSON
-            try:
-                ai_analysis = json.loads(response_text)
-            except json.JSONDecodeError as json_error:
-                logger.warning(f"Failed to parse AI response as JSON: {json_error}. Response: {response_text[:200]}")
-                # Use fallback analysis if JSON parsing fails
-                logger.info(f"Using fallback CVE analysis for {context['cve_id']}")
-                return self._fallback_cve_analysis(cve_data, client)
-            
-            # Validate required fields
-            if not isinstance(ai_analysis, dict):
-                logger.warning(f"AI response is not a dictionary, using fallback")
+            if not ai_analysis:
+                logger.warning(f"Empty AI analysis for {cve_details['cve_id']}, using fallback")
                 return self._fallback_cve_analysis(cve_data, client)
             
             # Calculate client impact score
@@ -501,10 +402,10 @@ class EnhancedPatchManagementAgent:
             patch_priority = patch_priority_map.get(patch_urgency.lower(), "MEDIUM")
             
             analysis = CVEAnalysis(
-                cve_id=context['cve_id'],
-                severity=context['severity'],
-                product=context['product'],
-                summary=context['summary'],
+                cve_id=cve_details['cve_id'],
+                severity=cve_details['severity'],
+                product=cve_details['product'],
+                summary=cve_details['summary'],
                 client_impact=float(client_impact),
                 ai_analysis=ai_analysis
             )
@@ -650,70 +551,13 @@ class EnhancedPatchManagementAgent:
                 "business_hours": getattr(patch_plan.client, 'business_hours', '9-17 UTC')
             }
             
-            prompt = f"""
-            As an expert DevSecOps Architect and AI Scheduler, optimize these maintenance windows.
-            Focus on SECURITY, MINIMIZING DOWNTIME, and MANAGING RISK.
+            # Call Gemini Service
+            optimization = await self.gemini_service.optimize_maintenance_schedule(context)
             
-            Client: {context['client_name']} ({context['client_id']})
-            Business Hours: {context['business_hours']}
-            
-            Current Maintenance Windows:
-            {json.dumps(context['maintenance_windows'], indent=2, default=str)}
-            
-            Historical Performance:
-            {json.dumps(context['success_rates'], indent=2)}
-            
-            Provide an optimized schedule in JSON format with advanced security analytics.
-            
-            Required JSON Structure:
-            {{
-                "optimized_windows": [
-                    {{
-                        "window_id": "string",
-                        "optimized_time": "ISO datetime",
-                        "reasoning": "Detailed explanation for why this time was chosen",
-                        "success_probability": 0.0-1.0,
-                        "risk_mitigation": ["list of specific mitigations"],
-                        "rollback_plan": {{"steps": [], "triggers": []}},
-                        "resource_requirements": ["2 Senior Engineers", "1 DBA"],
-                        "security_checks": {{
-                            "pre_patch": ["Verify backup integrity", "Check active threat feeds"],
-                            "post_patch": ["Vulnerability scan", "Penetration test of patched service"]
-                        }}
-                    }}
-                ],
-                "overall_risk_assessment": "low/medium/high",
-                "recommended_approach": "aggressive/conservative/balanced",
-                "success_prediction": 0.0-1.0,
-                "optimization_summary": "A brief summary of the optimization strategy used.",
-                "threat_window_analysis": {{
-                    "risk_of_delay": "High/Medium/Low",
-                    "exploitation_probability_next_24h": "Percentage (e.g. 15%)",
-                    "description": "Analysis of the risk incurred by waiting for this window."
-                }},
-                "security_dependency_check": {{
-                    "conflicts_detected": false,
-                    "dependencies": ["List of dependent systems checked"],
-                    "notes": "Analysis of potential side-effects on other security controls."
-                }},
-                "resource_impact_forecast": {{
-                    "cpu_spike_estimate": "e.g. 85%",
-                    "memory_usage_estimate": "e.g. 4GB",
-                    "network_bandwidth_impact": "e.g. High during download"
-                }}
-            }}
-            """
-            
-            response = await self.model.generate_content_async(prompt)
-            
-            response_text = response.text.strip()
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
+            if not optimization:
+                logger.warning(f"Empty AI optimization for {patch_plan.client.id}, using fallback")
+                return self._fallback_optimization(patch_plan)
                 
-            optimization = json.loads(response_text)
-            
             return optimization
             
         except Exception as e:
@@ -778,7 +622,22 @@ class EnhancedPatchManagementAgent:
                 "cpu_spike_estimate": "45%",
                 "memory_usage_estimate": "2GB",
                 "network_bandwidth_impact": "Medium"
-            }
+            },
+            "risk_trajectory": [
+                {"time": "Current", "risk_score": 85, "label": "Pre-Patch"},
+                {"time": "Window Start", "risk_score": 85, "label": "Maintenance Begins"},
+                {"time": "Patch Applied", "risk_score": 45, "label": "Vulnerability Mitigated"},
+                {"time": "Verified", "risk_score": 10, "label": "Post-Verification"}
+            ],
+            "conflicts_avoided": [
+                {"conflict": "Weekly Database Backup", "resolution": "Shifted window by 2 hours"},
+                {"conflict": "Quarterly Financial Reporting", "resolution": "Scheduled for off-peak interval"}
+            ],
+            "detailed_resource_allocation": [
+                {"role": "DevOps Lead", "hours": 2, "status": "Available"},
+                {"role": "Database Admin", "hours": 1, "status": "On-Call"},
+                {"role": "Network Engineer", "hours": 0.5, "status": "Available"}
+            ]
         }
 
     async def monitor_patch_execution(self, window_id: str, client: Client) -> Dict:

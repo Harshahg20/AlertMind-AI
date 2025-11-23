@@ -25,11 +25,11 @@ import {
 import { drawerWidthExpanded, drawerWidthCollapsed } from "./constants";
 
 const navItems = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    icon: <BarChart3 className="w-5 h-5" />,
-  },
+  // {
+  //   id: "dashboard",
+  //   label: "Dashboard",
+  //   icon: <BarChart3 className="w-5 h-5" />,
+  // },
   {
     id: "alerts",
     label: "Alert Feed",
