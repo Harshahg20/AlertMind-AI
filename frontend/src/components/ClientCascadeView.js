@@ -36,15 +36,19 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
     
     setLoadingPredictions(true);
     try {
-      // Fetch all predictions in parallel instead of sequentially
+      // Fetch both basic and enhanced predictions in parallel for all clients
       const predictionPromises = clients.map(async (client) => {
         try {
-          // Only fetch basic predictions initially - enhanced can be lazy loaded
-          const basicPreds = await apiClient.getClientPredictions(client.id);
+          // Fetch both basic and enhanced predictions in parallel
+          const [basicPreds, enhancedPred] = await Promise.all([
+            apiClient.getClientPredictions(client.id),
+            apiClient.simulateEnhancedAgent(client.id)
+          ]);
+          
           return {
             clientId: client.id,
             predictions: Array.isArray(basicPreds) ? basicPreds : [],
-            enhanced: null, // Will be loaded on demand
+            enhanced: enhancedPred,
           };
         } catch (error) {
           console.error(`Error fetching predictions for ${client.name}:`, error);
@@ -307,60 +311,122 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
           <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 min-h-[500px] relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-gray-900/0 to-gray-900/0 pointer-events-none"></div>
             
-            {/* Mock Topology Visualization for Demo */}
-            <div className="relative z-10 w-full h-full flex flex-col items-center justify-center space-y-12">
-              <div className="flex justify-center space-x-16">
-                {/* Database Layer */}
-                <div className="relative group">
-                  <div className="w-16 h-16 rounded-full bg-red-900/30 border-2 border-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.3)] animate-pulse">
-                    <Server className="w-8 h-8 text-red-400" />
-                  </div>
-                  <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-center w-32">
-                    <div className="text-sm font-bold text-red-400">Primary DB</div>
-                    <div className="text-[10px] text-red-300/70">CRITICAL RISK</div>
-                  </div>
-                  {/* Connection Line */}
-                  <div className="absolute top-1/2 left-full w-16 h-0.5 bg-gradient-to-r from-red-500/50 to-orange-500/50"></div>
+            {/* Dynamic Topology Visualization */}
+            <div className="relative z-10 w-full h-full">
+              <h3 className="text-lg font-semibold text-white mb-6 flex items-center">
+                <Network className="w-5 h-5 mr-2" />
+                Live Topology Map - Client Risk Overview
+              </h3>
+              
+              {clients.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {clients.map((client) => {
+                    const prediction = enhancedPredictions[client.id]?.prediction; // Use enhancedPredictions for topology
+                    const riskLevel = prediction?.urgency_level || 'low';
+                    const affectedSystems = prediction?.affected_systems || [];
+                    
+                    // Determine colors based on risk level
+                    const getRiskColors = (level) => {
+                      switch(level) {
+                        case 'critical':
+                          return {
+                            bg: 'bg-red-900/30',
+                            border: 'border-red-500',
+                            text: 'text-red-400',
+                            shadow: 'shadow-[0_0_30px_rgba(239,68,68,0.3)]',
+                            pulse: 'animate-pulse'
+                          };
+                        case 'high':
+                          return {
+                            bg: 'bg-orange-900/30',
+                            border: 'border-orange-500',
+                            text: 'text-orange-400',
+                            shadow: 'shadow-[0_0_20px_rgba(249,115,22,0.2)]',
+                            pulse: ''
+                          };
+                        case 'medium':
+                          return {
+                            bg: 'bg-yellow-900/30',
+                            border: 'border-yellow-500',
+                            text: 'text-yellow-400',
+                            shadow: '',
+                            pulse: ''
+                          };
+                        default:
+                          return {
+                            bg: 'bg-green-900/30',
+                            border: 'border-green-500',
+                            text: 'text-green-400',
+                            shadow: '',
+                            pulse: ''
+                          };
+                      }
+                    };
+                    
+                    const colors = getRiskColors(riskLevel);
+                    
+                    return (
+                      <div key={client.id} className="bg-gray-800/40 rounded-lg p-4 border border-gray-700/50">
+                        {/* Client Node */}
+                        <div className="flex items-center justify-center mb-4">
+                          <div className={`w-20 h-20 rounded-full ${colors.bg} border-2 ${colors.border} flex items-center justify-center ${colors.shadow} ${colors.pulse}`}>
+                            <Users className={`w-10 h-10 ${colors.text}`} />
+                          </div>
+                        </div>
+                        
+                        <div className="text-center mb-4">
+                          <div className={`text-sm font-bold ${colors.text}`}>{client.name}</div>
+                          <div className="text-[10px] text-gray-400 uppercase mt-1">
+                            {riskLevel} Risk
+                          </div>
+                          {prediction && (
+                            <div className="text-[10px] text-gray-500 mt-1">
+                              {prediction.predicted_in}m to cascade
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Affected Systems */}
+                        {affectedSystems.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold mb-2">
+                              Affected Systems:
+                            </div>
+                            {affectedSystems.slice(0, 4).map((system, idx) => (
+                              <div key={idx} className="flex items-center space-x-2 bg-gray-900/40 rounded px-2 py-1.5">
+                                <div className={`w-1.5 h-1.5 rounded-full ${
+                                  idx === 0 ? 'bg-red-500 animate-pulse' : 
+                                  idx === 1 ? 'bg-orange-500' : 
+                                  'bg-yellow-500'
+                                }`}></div>
+                                <span className="text-[10px] text-gray-300">{system}</span>
+                              </div>
+                            ))}
+                            {affectedSystems.length > 4 && (
+                              <div className="text-[9px] text-gray-500 text-center mt-1">
+                                +{affectedSystems.length - 4} more systems
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {!prediction && (
+                          <div className="text-xs text-gray-500 text-center italic">
+                            No active predictions
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-
-              <div className="flex justify-center space-x-24">
-                {/* App Layer */}
-                <div className="relative group">
-                  <div className="w-14 h-14 rounded-full bg-orange-900/30 border-2 border-orange-500 flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.2)]">
-                    <Activity className="w-7 h-7 text-orange-400" />
-                  </div>
-                  <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-center w-32">
-                    <div className="text-sm font-bold text-orange-400">API Gateway</div>
-                    <div className="text-[10px] text-orange-300/70">HIGH LATENCY</div>
-                  </div>
-                   {/* Connection Line Down */}
-                   <div className="absolute top-full left-1/2 w-0.5 h-12 bg-gradient-to-b from-orange-500/50 to-yellow-500/50"></div>
-                </div>
-
-                <div className="relative group">
-                  <div className="w-14 h-14 rounded-full bg-green-900/30 border-2 border-green-500 flex items-center justify-center">
-                    <Shield className="w-7 h-7 text-green-400" />
-                  </div>
-                  <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-center w-32">
-                    <div className="text-sm font-bold text-green-400">Auth Service</div>
-                    <div className="text-[10px] text-green-300/70">STABLE</div>
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-gray-500 text-center">
+                    <Network className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No clients available</p>
                   </div>
                 </div>
-              </div>
-
-              <div className="flex justify-center space-x-16">
-                {/* Frontend Layer */}
-                <div className="relative group">
-                  <div className="w-12 h-12 rounded-full bg-yellow-900/30 border-2 border-yellow-500 flex items-center justify-center">
-                    <Target className="w-6 h-6 text-yellow-400" />
-                  </div>
-                  <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-center w-32">
-                    <div className="text-sm font-bold text-yellow-400">Frontend LB</div>
-                    <div className="text-[10px] text-yellow-300/70">DEGRADING</div>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
 
             <div className="absolute bottom-4 right-4 bg-black/40 backdrop-blur-sm p-3 rounded-lg border border-gray-700">
@@ -384,9 +450,10 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
         ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredClients.map((client) => {
-            const riskLevel = getClientRiskLevel(client.id);
             const enhanced = enhancedPredictions[client.id];
-            const basicPreds = clientPredictions[client.id] || [];
+            const prediction = enhanced?.prediction;
+            const riskLevel = prediction?.urgency_level || 'low';
+            const affectedSystems = prediction?.affected_systems || [];
 
             return (
               <div
@@ -410,70 +477,73 @@ const ClientCascadeView = ({ clients = [], loading = false }) => {
                     >
                       {riskLevel} Risk
                     </div>
-                    <div className="text-xs text-gray-400">
-                      {basicPreds.length} predictions
-                    </div>
+                    {prediction && (
+                      <div className="text-xs text-gray-400">
+                        {affectedSystems.length} systems
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {enhanced?.prediction && (
+                {prediction ? (
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-400">Time to Cascade:</span>
                       <span className="text-white font-medium">
-                        {formatTimeToCascade(enhanced.prediction.predicted_in)}
+                        {formatTimeToCascade(prediction.predicted_in)}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Confidence:</span>
                       <span
                         className={`font-medium ${getConfidenceColor(
-                          enhanced.prediction.confidence
+                          prediction.confidence
                         )}`}
                       >
-                        {(enhanced.prediction.confidence * 100).toFixed(0)}%
+                        {(prediction.confidence * 100).toFixed(0)}%
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Urgency:</span>
                       <span
                         className={`px-2 py-1 rounded text-xs font-medium ${getUrgencyColor(
-                          enhanced.prediction.urgency_level
+                          prediction.urgency_level
                         )}`}
                       >
-                        {enhanced.prediction.urgency_level}
+                        {prediction.urgency_level}
                       </span>
                     </div>
-                  </div>
-                )}
 
-                {basicPreds.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-600">
-                    <div className="text-sm text-gray-400 mb-2">
-                      Recent Predictions:
-                    </div>
-                    <div className="space-y-2">
-                      {basicPreds.slice(0, 2).map((pred, idx) => (
-                        <div key={idx} className="flex justify-between text-sm">
-                          <span className="text-gray-300">
-                            {(pred.affected_systems &&
-                              pred.affected_systems.length > 0) ||
-                            (pred.predicted_cascade_systems &&
-                              pred.predicted_cascade_systems.length > 0)
-                              ? pred.affected_systems?.[0] ||
-                                pred.predicted_cascade_systems?.[0]
-                              : pred.pattern ||
-                                pred.pattern_matched ||
-                                "Unknown System"}
-                          </span>
-                          <span className="text-yellow-400">
-                            {formatTimeToCascade(
-                              pred.time_to_cascade_minutes || 0
-                            )}
-                          </span>
+                    {affectedSystems.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-600">
+                        <div className="text-sm text-gray-400 mb-2">
+                          Affected Systems:
                         </div>
-                      ))}
-                    </div>
+                        <div className="space-y-2">
+                          {affectedSystems.slice(0, 2).map((system, idx) => (
+                            <div key={idx} className="flex items-center space-x-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                idx === 0 ? 'bg-red-500 animate-pulse' : 
+                                idx === 1 ? 'bg-orange-500' : 
+                                'bg-yellow-500'
+                              }`}></div>
+                              <span className="text-gray-300 text-sm">
+                                {system}
+                              </span>
+                            </div>
+                          ))}
+                          {affectedSystems.length > 2 && (
+                            <div className="text-xs text-gray-500 ml-4">
+                              +{affectedSystems.length - 2} more systems
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500">
+                    <div className="text-sm italic">Loading prediction...</div>
                   </div>
                 )}
               </div>

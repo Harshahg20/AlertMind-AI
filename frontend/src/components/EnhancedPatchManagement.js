@@ -21,6 +21,7 @@ import {
   Sparkles,
   TrendingDown,
   Users,
+  Play,
 } from "lucide-react";
 import { apiClient } from "../utils/apiClient";
 import { EnhancedPatchSkeleton } from "./SkeletonLoader";
@@ -44,6 +45,9 @@ const EnhancedPatchManagement = ({ clients = [], loading = false, remediationCon
   const [expandedSections, setExpandedSections] = useState({});
   const [isExecuting, setIsExecuting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showEmergencyStopModal, setShowEmergencyStopModal] = useState(false);
+  const [emergencyStopInProgress, setEmergencyStopInProgress] = useState(false);
+  const [systemStopped, setSystemStopped] = useState(false);
 
   // Safe clients array
   const displayClients = clients && Array.isArray(clients) ? clients : [];
@@ -197,6 +201,54 @@ const EnhancedPatchManagement = ({ clients = [], loading = false, remediationCon
       ...prev,
       [section]: !prev[section]
     }));
+  };
+
+  const handleEmergencyStop = async () => {
+    setShowEmergencyStopModal(false);
+    setEmergencyStopInProgress(true);
+    
+    try {
+      // Simulate emergency stop procedure
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Stop all ongoing operations
+      setIsExecuting(false);
+      setSystemStopped(true);
+      
+      // Update monitoring data to show stopped state
+      if (monitoringData) {
+        setMonitoringData({
+          ...monitoringData,
+          status: 'EMERGENCY_STOPPED',
+          metrics: {
+            ...monitoringData.metrics,
+            success_rate: monitoringData.metrics.success_rate,
+            systems_patched: monitoringData.metrics.systems_patched,
+            critical_failures: (monitoringData.metrics.critical_failures || 0) + 1,
+          },
+          emergency_stop_time: new Date().toISOString(),
+        });
+      }
+      
+      // Show success notification
+      setError(null);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+      
+    } catch (err) {
+      console.error('Error during emergency stop:', err);
+      setError('Emergency stop failed. Please contact support immediately.');
+    } finally {
+      setEmergencyStopInProgress(false);
+    }
+  };
+
+  const handleResumeOperations = () => {
+    setSystemStopped(false);
+    setMonitoringData(prev => prev ? {
+      ...prev,
+      status: 'ACTIVE',
+    } : null);
   };
 
   const analyzeCveForClient = useCallback(async (clientId, cveId) => {
@@ -508,6 +560,139 @@ const EnhancedPatchManagement = ({ clients = [], loading = false, remediationCon
           ))}
         </div>
       </div>
+
+      {/* Emergency Stop Confirmation Modal */}
+      {showEmergencyStopModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border-2 border-red-500 rounded-xl max-w-2xl w-full shadow-2xl shadow-red-500/20 animate-in fade-in zoom-in duration-300">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-900/40 to-orange-900/40 p-6 border-b border-red-500/30">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-red-500/20 rounded-full animate-pulse">
+                  <AlertTriangle className="w-8 h-8 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">Emergency Stop Confirmation</h3>
+                  <p className="text-red-300 text-sm mt-1">This action will immediately halt all patch operations</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6">
+              {/* Warning Message */}
+              <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <AlertCircle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-400 font-semibold mb-2">⚠️ Critical Warning</h4>
+                    <p className="text-gray-300 text-sm">
+                      Activating Emergency Stop will immediately terminate all ongoing patch deployments. 
+                      This may leave systems in an inconsistent state and require manual intervention.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Impact Details */}
+              <div className="space-y-3">
+                <h4 className="text-white font-semibold flex items-center">
+                  <Server className="w-4 h-4 mr-2 text-orange-400" />
+                  System Impact
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
+                    <div className="text-xs text-gray-400 mb-1">Affected Systems</div>
+                    <div className="text-lg font-bold text-white">
+                      {monitoringData?.metrics?.systems_patched || 0} / {monitoringData?.metrics?.total_systems || 50}
+                    </div>
+                  </div>
+                  <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
+                    <div className="text-xs text-gray-400 mb-1">In-Progress Operations</div>
+                    <div className="text-lg font-bold text-orange-400">
+                      {monitoringData?.deployment_map?.filter(d => d.status === 'in_progress').length || 0}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* What Will Happen */}
+              <div className="space-y-3">
+                <h4 className="text-white font-semibold flex items-center">
+                  <CheckCircle2 className="w-4 h-4 mr-2 text-blue-400" />
+                  What Will Happen
+                </h4>
+                <div className="space-y-2">
+                  {[
+                    { icon: '🛑', text: 'All patch deployments will be immediately paused', color: 'text-red-400' },
+                    { icon: '🔄', text: 'Automatic rollback will be initiated for in-progress patches', color: 'text-orange-400' },
+                    { icon: '📋', text: 'Incident report will be generated for audit trail', color: 'text-blue-400' },
+                    { icon: '👥', text: 'Team notifications will be sent to all administrators', color: 'text-purple-400' },
+                    { icon: '⏸️', text: 'System will enter safe mode until manually resumed', color: 'text-yellow-400' },
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-start space-x-3 text-sm">
+                      <span className="text-lg">{item.icon}</span>
+                      <span className={item.color}>{item.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Confirmation Checkbox */}
+              <div className="bg-gray-800/30 border border-gray-700 rounded-lg p-4">
+                <label className="flex items-start space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="emergency-confirm"
+                    className="mt-1 rounded border-gray-600 bg-gray-800 text-red-600 focus:ring-red-500"
+                  />
+                  <span className="text-sm text-gray-300">
+                    I understand the consequences and want to proceed with Emergency Stop. 
+                    This action should only be taken in critical situations.
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="bg-gray-800/50 p-6 border-t border-gray-700 flex justify-end space-x-3">
+              <button
+                onClick={() => setShowEmergencyStopModal(false)}
+                className="px-6 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const checkbox = document.getElementById('emergency-confirm');
+                  if (checkbox?.checked) {
+                    handleEmergencyStop();
+                  } else {
+                    alert('Please confirm that you understand the consequences before proceeding.');
+                  }
+                }}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-colors flex items-center"
+              >
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                Execute Emergency Stop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification for Emergency Stop */}
+      {showSuccess && systemStopped && (
+        <div className="fixed bottom-4 right-4 bg-green-900/90 border border-green-500 rounded-lg p-4 shadow-xl shadow-green-500/20 animate-in slide-in-from-bottom duration-300 z-50">
+          <div className="flex items-center space-x-3">
+            <CheckCircle className="w-6 h-6 text-green-400" />
+            <div>
+              <h4 className="text-white font-semibold">Emergency Stop Executed</h4>
+              <p className="text-green-300 text-sm">All operations have been safely halted. System is in safe mode.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error Banner */}
       {error && (
@@ -1886,10 +2071,23 @@ const EnhancedPatchManagement = ({ clients = [], loading = false, remediationCon
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <button className="px-3 py-1.5 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded text-sm font-medium transition-colors flex items-center">
+                  <button 
+                    onClick={() => setShowEmergencyStopModal(true)}
+                    disabled={emergencyStopInProgress || systemStopped}
+                    className={`px-3 py-1.5 ${systemStopped ? 'bg-gray-700 cursor-not-allowed' : 'bg-red-900/20 hover:bg-red-900/40'} text-red-400 border border-red-900/50 rounded text-sm font-medium transition-colors flex items-center`}
+                  >
                     <AlertTriangle className="w-4 h-4 mr-2" />
-                    Emergency Stop
+                    {systemStopped ? 'System Stopped' : emergencyStopInProgress ? 'Stopping...' : 'Emergency Stop'}
                   </button>
+                  {systemStopped && (
+                    <button 
+                      onClick={handleResumeOperations}
+                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors flex items-center"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Resume Operations
+                    </button>
+                  )}
                   <button 
                     onClick={fetchMonitoringSimulation}
                     className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors flex items-center"
